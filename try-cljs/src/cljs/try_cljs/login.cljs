@@ -11,9 +11,9 @@
       (do (js/alert "Please, complete the form")
           false))))
 
-; (defn init []
-;   (if (and js/document (.-getElementById js/document))
-;     (let [login-form (.getElementById js/document "shoppingForm")]
-;       (set! (.-onsubmit login-form) validate-form))))
+(defn ^:export init []
+  (if (and js/document (.-getElementById js/document))
+    (let [login-form (.getElementById js/document "loginForm")]
+      (set! (.-onsubmit login-form) validate-form))))
 
 ; (set! (.-onload js/window) init)

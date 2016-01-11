@@ -11,9 +11,9 @@
                                     (.toFixed 2)))
     false))
 
-(defn init []
+(defn ^:export init []
   (. js/console log "Initiating")
   (if (and js/document (. js/document -getElementById))
     (set! (.-onsubmit (. js/document getElementById "shoppingForm")) calculate)))
 
-(set! (.-onload js/window) init)
+; (set! (.-onload js/window) init)
