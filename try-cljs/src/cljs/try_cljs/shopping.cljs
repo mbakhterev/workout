@@ -1,5 +1,6 @@
 (ns try-cljs.shopping
-  (:require [domina.core :refer [by-id value set-value!]]))
+  (:require [domina.core :refer [by-id value set-value!]]
+            [domina.events :refer [listen!]]))
 
 (defn calculate []
   (. js/console log "Calculating")
@@ -11,9 +12,14 @@
                                     (.toFixed 2)))
     false))
 
+; (defn ^:export init []
+;   (. js/console log "Initiating")
+;   (if (and js/document (. js/document -getElementById))
+;     (set! (.-onsubmit (. js/document getElementById "shoppingForm")) calculate)))
+
 (defn ^:export init []
   (. js/console log "Initiating")
   (if (and js/document (. js/document -getElementById))
-    (set! (.-onsubmit (. js/document getElementById "shoppingForm")) calculate)))
-
+    (listen! (by-id "calc") :click calculate)))
+ 
 ; (set! (.-onload js/window) init)
