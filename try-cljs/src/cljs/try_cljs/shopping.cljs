@@ -1,6 +1,9 @@
 (ns try-cljs.shopping
-  (:require [domina.core :refer [by-id value set-value!]]
-            [domina.events :refer [listen!]]))
+  (:require [domina.core :refer [by-id by-class value
+                                 set-value! append! destroy!]]
+            [domina.events :refer [listen!]]
+            [hiccups.runtime])
+  (:require-macros [hiccups.core :refer [html]]))
 
 (defn calculate []
   (. js/console log "Calculating")
@@ -9,8 +12,7 @@
     (set-value! (by-id "total") (-> (* quantity price)
                                     (* (+ 1 (/ tax 100)))
                                     (- discount)
-                                    (.toFixed 2)))
-    false))
+                                    (.toFixed 2)))))
 
 ; (defn ^:export init []
 ;   (. js/console log "Initiating")
@@ -19,7 +21,18 @@
 
 (defn ^:export init []
   (. js/console log "Initiating")
-  (if (and js/document (. js/document -getElementById))
-    (listen! (by-id "calc") :click calculate)))
+  (when (and js/document 
+             (aget js/document "getElementById"))
+    (let [calc-listen! (partial listen! (by-id "calc"))]
+      (calc-listen! :click
+                    calculate)
+      (calc-listen! :mouseover
+                    (fn [] (append! (by-id "shoppingForm") (html [:div.help "click to compute"]))))
+      (calc-listen! :mouseout
+                    (fn [] (destroy! (by-class "help")))))))
  
 ; (set! (.-onload js/window) init)
+
+; (fn [] (append!  (by-id "shoppingForm") "<div class='help'>Click to recalculate.</div>")))
+
+; (and js/document (. js/document -getElementById))
