@@ -14,7 +14,8 @@
                   [hiccups "0.3.0"]
                   [compojure "1.4.0"]
                   [org.clojars.magomimmo/shoreleave-remote-ring "0.3.1"]
-                  [org.clojars.magomimmo/shoreleave-remote "0.3.1"]])
+                  [org.clojars.magomimmo/shoreleave-remote "0.3.1"]
+                  [javax.servlet/servlet-api "2.5"]])
 
 (require '[adzerk.boot-cljs :refer [cljs]]
          '[pandeiro.boot-http :refer [serve]]
@@ -23,7 +24,7 @@
 
 (deftask dev []
   (comp (serve :dir "/tmp/target"
-               :handler 'try-cljs.core/handler
+               :handler 'try-cljs.remotes/app
                :resource-root "/tmp/target"
                :reload true)
         (watch)

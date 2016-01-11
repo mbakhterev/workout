@@ -2,17 +2,31 @@
   (:require [domina.core :refer [by-id by-class value
                                  set-value! append! destroy!]]
             [domina.events :refer [listen!]]
-            [hiccups.runtime])
+            [hiccups.runtime]
+            [shoreleave.remotes.http-rpc :refer [remote-callback]]
+            [cljs.reader :refer [read-string]])
   (:require-macros [hiccups.core :refer [html]]))
 
-(defn calculate []
+(defn extract [] (map (comp value by-id) ["quantity" "price" "tax" "discount"]))
+
+(defn calculate-inplace []
   (. js/console log "Calculating")
-  (let [[quantity price tax discount] (map (comp value by-id)
-                                           ["quantity" "price" "tax" "discount"])]
+  (let [[quantity
+         price
+         tax
+         discount] (map (comp value by-id)
+                        ["quantity" "price" "tax" "discount"])]
     (set-value! (by-id "total") (-> (* quantity price)
                                     (* (+ 1 (/ tax 100)))
                                     (- discount)
                                     (.toFixed 2)))))
+
+(defn calculate []
+  (let [args (map (comp read-string value by-id)
+                  ["quantity" "price" "tax" "discount"])]
+    (remote-callback :calculate
+                     (vec args)
+                     (fn [r] (set-value! (by-id "total") (.toFixed r 2))))))
 
 ; (defn ^:export init []
 ;   (. js/console log "Initiating")
@@ -27,12 +41,14 @@
       (calc-listen! :click
                     calculate)
       (calc-listen! :mouseover
-                    (fn [] (append! (by-id "shoppingForm") (html [:div.help "click to compute"]))))
+                    (fn [] (append! (by-id "shoppingForm")
+                                    (html [:div.help "click to compute"]))))
       (calc-listen! :mouseout
                     (fn [] (destroy! (by-class "help")))))))
  
 ; (set! (.-onload js/window) init)
 
-; (fn [] (append!  (by-id "shoppingForm") "<div class='help'>Click to recalculate.</div>")))
+; (fn [] (append! (by-id "shoppingForm")
+;                 "<div class='help'>Click to recalculate.</div>")))
 
 ; (and js/document (. js/document -getElementById))
