@@ -1,4 +1,8 @@
-(ns Player (:gen-class))
+; (ns Player (:gen-class))
+
+(ns boot.user)
+
+(+ 1 2)
 
 (defn- height [surface x y]
   (let [xa (comp first first)

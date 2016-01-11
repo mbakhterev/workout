@@ -1,1 +1,0 @@
-{:require [try-cljs.core] :compiler-options {:asset-path "js/main.out"}}
