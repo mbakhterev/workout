@@ -1,5 +1,5 @@
 (set-env!
-  :source-paths #{"src/cljs"}
+  :source-paths #{"src/cljs" "src/clj"}
   :resource-paths #{"html"}
   :dependencies '[[org.clojure/clojure "1.7.0"]
                   [org.clojure/clojurescript "1.7.170"]
@@ -11,7 +11,10 @@
                   [weasel "0.7.0"]
                   [org.clojure/tools.nrepl "0.2.12"]
                   [org.clojars.magomimmo/domina "2.0.0-SNAPSHOT"]
-                  [hiccups "0.3.0"]])
+                  [hiccups "0.3.0"]
+                  [compojure "1.4.0"]
+                  [org.clojars.magomimmo/shoreleave-remote-ring "0.3.1"]
+                  [org.clojars.magomimmo/shoreleave-remote "0.3.1"]])
 
 (require '[adzerk.boot-cljs :refer [cljs]]
          '[pandeiro.boot-http :refer [serve]]
@@ -19,7 +22,10 @@
          '[adzerk.boot-cljs-repl :refer [cljs-repl start-repl]])
 
 (deftask dev []
-  (comp (serve :dir "/tmp/target")
+  (comp (serve :dir "/tmp/target"
+               :handler 'try-cljs.core/handler
+               :resource-root "/tmp/target"
+               :reload true)
         (watch)
         (reload)
         (cljs-repl)
