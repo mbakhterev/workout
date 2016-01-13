@@ -1,17 +1,11 @@
 (ns try-cljs.login
-  (:require [domina.core :refer [by-id by-class value
+  (:require [domina.core :refer [by-id by-class value attr
                                  prepend! append! destroy!]]
             [domina.events :refer [listen! prevent-default]]
             [hiccups.runtime])
   (:require-macros [hiccups.core :refer [html]]))
 
 (. js/console log "try-cljs.login here")
-
-(def ^:const password-re
-  #"^(?=.*\d).{4,8}$")
-
-(def ^:const email-re
-  #"^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,4})$")
 
 (defn validate-form [e]
   (let [[email password :as fields] (map by-id ["email" "password"])]
@@ -27,7 +21,8 @@
 
 (defn validate-email [email]
   (destroy! (by-class "email"))
-  (if (not (re-matches email-re (value email)))
+  (if (not (re-matches (re-pattern (attr email :pattern))
+                       (value email)))
     (do (prepend! (by-id "loginForm")
                   (html [:div.help.email "incorrect email"]))
         false)
@@ -35,7 +30,8 @@
 
 (defn validate-password [password]
   (destroy! (by-class "password"))
-  (if (not (re-matches password-re (value password)))
+  (if (not (re-matches (re-pattern (attr password :pattern))
+                       (value password)))
     (do (append! (by-id "loginForm")
                  (html [:div.help.password "incorrect password"]))
         false)
@@ -73,3 +69,10 @@
 ;           (prevent-default e)
 ;           (js/alert "Please, complete the form")
 ;           false))))
+
+; (def ^:const password-re
+;   #"^(?=.*\d).{4,8}$")
+; 
+; (def ^:const email-re
+;   #"^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,4})$")
+ 
