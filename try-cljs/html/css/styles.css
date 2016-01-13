@@ -125,6 +125,8 @@ input.default {
 	background-position:0 -26px;
 }
 
+.help { color: red; }
+
 .error {
 	color: #FF1400;
 }
