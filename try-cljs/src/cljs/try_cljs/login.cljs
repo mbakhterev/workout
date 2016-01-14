@@ -2,31 +2,59 @@
   (:require [domina.core :refer [by-id by-class value attr
                                  prepend! append! destroy!]]
             [domina.events :refer [listen! prevent-default]]
-            [hiccups.runtime]
-            [try-cljs.login.validators :refer [user-credentials-errors]])
-  (:require-macros [hiccups.core :refer [html]]))
+            [hiccups.runtime :as hiccupstr]
+            [try-cljs.login.validators :refer [user-credentials-errors]]
+            [shoreleave.remotes.http-rpc :refer [remote-callback]])
+  (:require-macros [hiccups.core :refer [html]]
+                   [shoreleave.remotes.macros :as shore-macros]))
 
 (. js/console log "try-cljs.login here")
 
-(defn validate-email [email]
+(comment (defn validate-email [email]
   (destroy! (by-class "email"))
   (if (not (re-matches (re-pattern (attr email :pattern))
                        (value email)))
     (do (prepend! (by-id "loginForm")
                   (html [:div.help.email "incorrect email"]))
         false)
-    true))
+    true)))
 
-(defn validate-password [password]
+
+(defn validate-email-domain [email]
+  (. js/console log (str "validating e-mail: " email))
+  (remote-callback :email-domain-errors [email]
+                   (fn [r]
+                     (. js/console log (str "validation response: " r))
+                     (if r
+                       (do (prepend! (by-id "loginForm")
+                                     (html [:div.help.email "wrong email domain"]))
+                           false)
+                       true))))
+
+(defn validate-email [email]
+  (destroy! (by-class "email"))
+  (if-let [err (-> (user-credentials-errors (value email) nil) :email first)]
+    (do (prepend! (by-id "loginForm") (html [:div.help.email err]))
+        false)
+    (validate-email-domain (value email))))
+
+(comment (defn validate-password [password]
   (destroy! (by-class "password"))
   (if (not (re-matches (re-pattern (attr password :pattern))
                        (value password)))
     (do (append! (by-id "loginForm")
                  (html [:div.help.password "incorrect password"]))
         false)
+    true)))
+
+(defn validate-password [password]
+  (destroy! (by-class "password"))
+  (if-let [err (-> (user-credentials-errors nil (value password)) :password first)]
+    (do (prepend! (by-id "loginForm") (html [:div.help.password err]))
+        false)
     true))
 
-(defn validate-form [e]
+(comment (defn validate-form [e]
   (let [[email password :as fields] (map by-id ["email" "password"])]
     (if (every? (comp empty? value) fields)
       (do (destroy! (by-class "help"))
@@ -36,7 +64,17 @@
       (if (and (validate-email email)
                (validate-password password))
         true
-        (prevent-default e)))))
+        (prevent-default e))))))
+
+(defn validate-form [e email password]
+  (let [{e-err :email p-err :password} (user-credentials-errors (value email)
+                                                                (value password))]
+    (if (or e-err p-err)
+      (do (destroy! (by-class "help"))
+          (append! (by-id "loginForm") (html [:div.help "please, correct input"]))
+          (prevent-default e)
+          false)
+      true)))
 
 (defn ^:export init []
   (. js/console log "login init")
@@ -45,7 +83,7 @@
     (let [[submit email password] (map by-id ["submit" "email" "password"])]
       (listen! submit
                :click
-               validate-form)
+               (fn [e] (validate-form e email password)))
       (listen! email
                :blur
                (fn [e] (validate-email email)))
