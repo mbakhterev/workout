@@ -1,4 +1,5 @@
-(ns try-cljs.login)
+(ns try-cljs.login
+  (:require [try-cljs.login.validators :refer [user-credentials-errors]]))
 
 
 (def ^:const password-re
@@ -13,10 +14,14 @@
 (defn- validate-password [password]
   (re-matches password-re password))
 
-(defn authenticate-user [email password]
+(defn- authenticate-user- [email password]
   (if (some empty? [email password])
     (str "form isn't complete")
     (if (and (validate-email email)
              (validate-password password))
       (str email " and " password " checked. But aren't authenticated"))))
  
+(defn authenticate-user [email password]
+  (if (boolean (user-credentials-errors email password))
+    (str "Please correctly complete the form")
+    (str email " and " password " are checked. But user isn't authenticated")))

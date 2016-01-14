@@ -2,22 +2,11 @@
   (:require [domina.core :refer [by-id by-class value attr
                                  prepend! append! destroy!]]
             [domina.events :refer [listen! prevent-default]]
-            [hiccups.runtime])
+            [hiccups.runtime]
+            [try-cljs.login.validators :refer [user-credentials-errors]])
   (:require-macros [hiccups.core :refer [html]]))
 
 (. js/console log "try-cljs.login here")
-
-(defn validate-form [e]
-  (let [[email password :as fields] (map by-id ["email" "password"])]
-    (if (every? (comp empty? value) fields)
-      (do (destroy! (by-class "help"))
-          (prevent-default e)
-          (append! (by-id "loginForm")
-                   (html [:div.help "please, complete the form"])))
-      (if (and (validate-email email)
-               (validate-password password))
-        true
-        (prevent-default e)))))
 
 (defn validate-email [email]
   (destroy! (by-class "email"))
@@ -36,6 +25,18 @@
                  (html [:div.help.password "incorrect password"]))
         false)
     true))
+
+(defn validate-form [e]
+  (let [[email password :as fields] (map by-id ["email" "password"])]
+    (if (every? (comp empty? value) fields)
+      (do (destroy! (by-class "help"))
+          (prevent-default e)
+          (append! (by-id "loginForm")
+                   (html [:div.help "please, complete the form"])))
+      (if (and (validate-email email)
+               (validate-password password))
+        true
+        (prevent-default e)))))
 
 (defn ^:export init []
   (. js/console log "login init")
