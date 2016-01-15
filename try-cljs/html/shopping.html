@@ -10,7 +10,7 @@
 </head>
 <body>
     <!-- shopping.html -->
-    <form id="shoppingForm" novalidate>
+    <form action="/shopping" id="shoppingForm" method="POST" novalidate>
         <fieldset>
             <p>Use this form to calculate the order total.</p>
 			<div><label for="quantity">Quantity</label><input type="number" name="quantity" id="quantity" value="1" min="1" required></div>
@@ -19,7 +19,7 @@
 			<div><label for="discount">Discount</label><input type="text" name="discount" id="discount" value="0.00" required></div>
 			<div><label for="total">Total</label><input type="text" name="total" id="total" value="0.00"></div>
       <br><br>
-			<div><input type="button" value="Calculate" id="calc"></div>
+			<div><input type="submit" value="Calculate" id="calc"></div>
         </fieldset>
     </form>
     <script src="main.js"></script>

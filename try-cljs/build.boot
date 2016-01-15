@@ -16,7 +16,8 @@
                   [org.clojars.magomimmo/shoreleave-remote-ring "0.3.1"]
                   [org.clojars.magomimmo/shoreleave-remote "0.3.1"]
                   [javax.servlet/servlet-api "2.5"]
-                  [org.clojars.magomimmo/valip "0.4.0-SNAPSHOT"]])
+                  [org.clojars.magomimmo/valip "0.4.0-SNAPSHOT"]
+                  [enlive "1.1.6"]])
 
 (require '[adzerk.boot-cljs :refer [cljs]]
          '[pandeiro.boot-http :refer [serve]]
@@ -25,7 +26,7 @@
 
 (deftask dev []
   (comp (serve :dir "/tmp/target"
-               :handler 'try-cljs.remotes/app
+               :handler 'try-cljs.core/app
                :resource-root "/tmp/target"
                :reload true)
         (watch)

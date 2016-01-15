@@ -1,7 +1,7 @@
 (ns try-cljs.shopping
   (:require [domina.core :refer [by-id by-class value
                                  set-value! append! destroy!]]
-            [domina.events :refer [listen!]]
+            [domina.events :refer [listen! prevent-default]]
             [hiccups.runtime]
             [shoreleave.remotes.http-rpc :refer [remote-callback]]
             [cljs.reader :refer [read-string]])
@@ -21,12 +21,13 @@
                                     (- discount)
                                     (.toFixed 2)))))
 
-(defn calculate []
-  (let [args (map (comp read-string value by-id)
+(defn calculate [e]
+  (let [args (map (comp value by-id)
                   ["quantity" "price" "tax" "discount"])]
     (remote-callback :calculate
                      (vec args)
-                     (fn [r] (set-value! (by-id "total") (.toFixed r 2))))))
+                     (fn [r] (set-value! (by-id "total") (.toFixed r 2)))))
+  (prevent-default e))
 
 ; (defn ^:export init []
 ;   (. js/console log "Initiating")
@@ -39,12 +40,12 @@
              (aget js/document "getElementById"))
     (let [calc-listen! (partial listen! (by-id "calc"))]
       (calc-listen! :click
-                    calculate)
+                    (fn [e] (calculate e)))
       (calc-listen! :mouseover
-                    (fn [] (append! (by-id "shoppingForm")
+                    (fn [e] (append! (by-id "shoppingForm")
                                     (html [:div.help "click to compute"]))))
       (calc-listen! :mouseout
-                    (fn [] (destroy! (by-class "help")))))))
+                    (fn [e] (destroy! (by-class "help")))))))
  
 ; (set! (.-onload js/window) init)
 
