@@ -29,6 +29,17 @@
       nil
       (let [sqrt-D (Math/sqrt D) q (* 2 a)]
         (mapv (fn [op] (/ (op (- b) sqrt-D) q)) [+ -])))))
+; 
+; h = H;
+; v = V;
+; for (i = P; i < 4; i++)
+; {
+;   ht = 0;
+;   hv = 0;
+;   integrate(h, v, &ht, hv);
+;   h += ht;
+;   v += hv
+; }
 
 (defn- thrust [H V P]
   (let [[h v] (reduce integrate [H (- V)] (range P 4))

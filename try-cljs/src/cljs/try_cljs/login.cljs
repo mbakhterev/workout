@@ -22,18 +22,20 @@
 
 (defn validate-email-domain [email]
   (. js/console log (str "validating e-mail: " email))
-  (remote-callback :email-domain-errors [email]
-                   (fn [r]
-                     (. js/console log (str "validation response: " r))
-                     (if r
-                       (do (prepend! (by-id "loginForm")
-                                     (html [:div.help.email "wrong email domain"]))
-                           false)
-                       true))))
+  (remote-callback
+    :email-domain-errors [email]
+    (fn [r]
+      (. js/console log (str "validation response: " r))
+      (if r
+        (do (prepend! (by-id "loginForm") (html [:div.help.email "wrong email domain"]))
+            false)
+        true))))
 
 (defn validate-email [email]
   (destroy! (by-class "email"))
-  (if-let [err (-> (user-credentials-errors (value email) nil) :email first)]
+  (if-let [err (-> (user-credentials-errors (value email) nil)
+                   :email
+                   first)]
     (do (prepend! (by-id "loginForm") (html [:div.help.email err]))
         false)
     (validate-email-domain (value email))))
@@ -49,7 +51,9 @@
 
 (defn validate-password [password]
   (destroy! (by-class "password"))
-  (if-let [err (-> (user-credentials-errors nil (value password)) :password first)]
+  (if-let [err (-> (user-credentials-errors nil (value password))
+                   :password
+                   first)]
     (do (prepend! (by-id "loginForm") (html [:div.help.password err]))
         false)
     true))
