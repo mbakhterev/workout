@@ -17,12 +17,16 @@
                   [org.clojars.magomimmo/shoreleave-remote "0.3.1"]
                   [javax.servlet/servlet-api "2.5"]
                   [org.clojars.magomimmo/valip "0.4.0-SNAPSHOT"]
-                  [enlive "1.1.6"]])
+                  [enlive "1.1.6"]
+                  [adzerk/boot-test "1.0.7"]
+                  [crisptrutski/boot-cljs-test "0.2.1"]])
 
 (require '[adzerk.boot-cljs :refer [cljs]]
          '[pandeiro.boot-http :refer [serve]]
          '[adzerk.boot-reload :refer [reload]]
-         '[adzerk.boot-cljs-repl :refer [cljs-repl start-repl]])
+         '[adzerk.boot-cljs-repl :refer [cljs-repl start-repl]]
+         '[adzerk.boot-test :refer [test]]
+         '[crisptrutski.boot-cljs-test :refer [test-cljs]])
 
 (deftask dev []
   (comp (serve :dir "/tmp/target"
@@ -33,4 +37,24 @@
         (reload)
         (cljs-repl)
         (cljs)
+        (target :dir #{"/tmp/target"})))
+
+(deftask testing []
+  (set-env! :source-paths (fn [p] (conj p "test/cljc")))
+  identity)
+
+(deftask tdd []
+  (comp (serve :handler 'try-cljs.core/app
+               :dir "/tmp/target"
+               :resource-root "/tmp/target"
+               :reload true)
+        (testing)
+        (watch)
+        (reload)
+        (cljs-repl)
+        (test-cljs :out-file "main.js"
+                   :update-fs? true
+                   :js-env :phantom
+                   :namespaces '#{try-cljs.shopping.validators-test})
+        (test :namespaces '#{try-cljs.shopping.validators-test})
         (target :dir #{"/tmp/target"})))
