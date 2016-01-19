@@ -36,17 +36,17 @@
 
 (defn ^:export init []
   (. js/console log "Initiating")
-  (when (and js/document 
+  (when (and js/document
              (aget js/document "getElementById"))
     (let [calc-listen! (partial listen! (by-id "calc"))]
       (calc-listen! :click
                     (fn [e] (calculate e)))
       (calc-listen! :mouseover
                     (fn [e] (append! (by-id "shoppingForm")
-                                    (html [:div.help "click to compute"]))))
+                                     (html [:div.help "click to compute"]))))
       (calc-listen! :mouseout
                     (fn [e] (destroy! (by-class "help")))))))
- 
+
 ; (set! (.-onload js/window) init)
 
 ; (fn [] (append! (by-id "shoppingForm")

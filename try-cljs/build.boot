@@ -43,6 +43,12 @@
   (set-env! :source-paths (fn [p] (conj p "test/cljc")))
   identity)
 
+(def ^:const defaults {:test-dirs (set (map #(str "test/clj" %) ["" "s" "c"]))
+                       :output-to "main.js"
+                       :testbed :phantom
+                       :namespaces '#{try-cljs.shopping.validators-test
+                                      try-cljs.login.validators-tst}})
+
 (deftask add-source-path [t dirs PATH #{str} ":source-paths"]
   (merge-env! :source-paths dirs)
   identity)
@@ -56,9 +62,10 @@
    O opt LEVEL kw "optimization level"
    e testbed ENGINE kw "javascript testbed engine"
    n namespaces NS #{sym} "namespaces to run tests in"]
-  (let [D (or dirs (set (map (partial str "test/clj") ["" "c" "s"])))
-        testbed (or testbed :phantom)
-        output (or output "main.js")]
+  (let [D (or dirs (defaults :test-dirs))
+        testbed (or testbed (defaults :testbed))
+        output (or output (defaults :output-to))
+        namespaces (or namespaces (defaults :namespaces))]
     (comp (serve :handler 'try-cljs.core/app
                  :dir "/tmp/target"
                  :resource-root "/tmp/target"

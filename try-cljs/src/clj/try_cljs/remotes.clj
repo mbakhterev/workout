@@ -14,3 +14,5 @@
 (defremote email-domain-errors [email] (v/email-domain-errors email))
 
 ; (def app (site (wrap-rpc (var handler))))
+
+(+ 1 2)
