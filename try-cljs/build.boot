@@ -43,18 +43,36 @@
   (set-env! :source-paths (fn [p] (conj p "test/cljc")))
   identity)
 
-(deftask tdd []
-  (comp (serve :handler 'try-cljs.core/app
-               :dir "/tmp/target"
-               :resource-root "/tmp/target"
-               :reload true)
-        (testing)
-        (watch)
-        (reload)
-        (cljs-repl)
-        (test-cljs :out-file "main.js"
-                   :update-fs? true
-                   :js-env :phantom
-                   :namespaces '#{try-cljs.shopping.validators-test})
-        (test :namespaces '#{try-cljs.shopping.validators-test})
-        (target :dir #{"/tmp/target"})))
+(deftask add-source-path [t dirs PATH #{str} ":source-paths"]
+  (merge-env! :source-paths dirs)
+  identity)
+
+(deftask tdd
+  [t dirs PATH #{str} "test paths"
+   k httpkit bool "use http-kit server instead of jetty"
+   v verbose bool "verbose report of changed files"
+   p port PORT int "the web server port to listen"
+   o output NAME str "js output file name"
+   O opt LEVEL kw "optimization level"
+   e testbed ENGINE kw "javascript testbed engine"
+   n namespaces NS #{sym} "namespaces to run tests in"]
+  (let [D (or dirs (set (map (partial str "test/clj") ["" "c" "s"])))
+        testbed (or testbed :phantom)
+        output (or output "main.js")]
+    (comp (serve :handler 'try-cljs.core/app
+                 :dir "/tmp/target"
+                 :resource-root "/tmp/target"
+                 :reload true
+                 :httpkit httpkit
+                 :port port)
+          (add-source-path :dirs D)
+          (watch :verbose verbose)
+          (reload)
+          (cljs-repl)
+          (test-cljs :out-file output
+                     :update-fs? true
+                     :js-env testbed
+                     :namespaces namespaces
+                     :optimizations opt)
+          (test :namespaces namespaces)
+          (target :dir #{"/tmp/target"}))))
