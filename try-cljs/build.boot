@@ -47,7 +47,7 @@
                        :output-to "main.js"
                        :testbed :phantom
                        :namespaces '#{try-cljs.shopping.validators-test
-                                      try-cljs.login.validators-tst}})
+                                      try-cljs.login.validators-test}})
 
 (deftask add-source-path [t dirs PATH #{str} ":source-paths"]
   (merge-env! :source-paths dirs)
