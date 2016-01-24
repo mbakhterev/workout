@@ -1,7 +1,11 @@
 (ns try-cljs.shopping.validators-test
-  (:require [try-cljs.shopping.validators :refer [validate-shopping-form]]
+  (:require [try-cljs.shopping.validators :refer [validate-shopping-form
+                                                  validate-shopping-field]]
             #?(:clj  [clojure.test :refer [deftest is are testing]]
-               :cljs [cljs.test :refer-macros [deftest is are testing]])))
+               :cljs [cljs.test :refer-macros [deftest is are testing]]))
+
+  #?(:cljs (:require-macros
+             [try-cljs.shopping.validators-test :refer [gen-empty-tests]])))
 
 (deftest validate-shopping-form-test
   (testing "shopping form validation"
@@ -20,3 +24,20 @@
            
            "price should be a number"
            (first (:price (validate-shopping-form "1" "foo" "0" "0")))))))
+
+(comment (defmacro gen-empty-tests []
+  (concat '(are [expected actual] (= expected actual))
+          (mapcat identity
+                  (for [f ["quantity" "price" "tax" "discount"]
+                        v ["" nil]]
+                    [(str f " can't be empty")
+                     (list 'validate-shopping-field (keyword f) v)])))))
+
+(deftest validate-shopping-quantity-test
+  (testing "shopping quantity validation"
+    (testing "/ happy path"
+      (are [expected actual] (= expected actual)
+           nil (validate-shopping-field :quantity "20"))
+    
+    (testing "/ presence"
+      ))))

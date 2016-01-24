@@ -41,3 +41,15 @@
   (apply validate {:quantity q :price p :tax t :discount d} (check-list))))
 
 (comment (println (macroexpand '(validate-macro {} (checks-fn)))))
+
+(defn validate-shopping-quantity [q] (validate-shopping-form q "1" "2" "3"))
+
+(defn validate-shopping-field [field v]
+  (first (field (case field
+                  :quantity (validate-shopping-form v "1" "2" "3")
+                  :price    (validate-shopping-form "1" v "2" "3")
+                  :tax      (validate-shopping-form "1" "2" v "3")
+                  :discount (validate-shopping-form "1" "2" "3" v)))))
+
+
+
