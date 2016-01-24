@@ -2,7 +2,7 @@
   :source-paths #{"src/cljs" "src/clj" "src/cljc"}
   :resource-paths #{"html"}
   :dependencies '[[org.clojure/clojure "1.7.0"]
-                  [org.clojure/clojurescript "1.7.170"]
+                  [org.clojure/clojurescript "1.7.228"]
                   [adzerk/boot-cljs "1.7.170-3"]
                   [pandeiro/boot-http "0.7.0"]
                   [adzerk/boot-reload "0.4.2"]
