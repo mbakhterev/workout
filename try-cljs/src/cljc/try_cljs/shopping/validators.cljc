@@ -5,8 +5,7 @@
                                       decimal-string?
                                       gt]])
   #?(:cljs (:require-macros
-             [try-cljs.shopping.validators :refer [validate-macro
-                                                   check-list]])))
+             [try-cljs.shopping.validators :refer [validate-macro]])))
 
 (defn- empty-checks []
   (map (fn [x] [(keyword x) 'present? (str x " can't be empty")])
@@ -26,23 +25,11 @@
                             (number-checks)
                             (quantity-checks)))
 
-(defmacro check-list [] (cons 'list (checks-fn)))
-
-(defmacro validate-macro [V C]
-  (comment (do (println "expanding" &form)
-               (println `(validate ~V ~@(eval C)))))
-  `(validate ~V ~@(eval C)))
+(defmacro validate-macro [V C] `(validate ~V ~@(eval C)))
 
 (defn validate-shopping-form [q p t d]
   (validate-macro {:quantity q :price p :tax t :discount d}
                   (checks-fn)))
-
-(comment (defn validate-shopping-form [q p t d]
-  (apply validate {:quantity q :price p :tax t :discount d} (check-list))))
-
-(comment (println (macroexpand '(validate-macro {} (checks-fn)))))
-
-(defn validate-shopping-quantity [q] (validate-shopping-form q "1" "2" "3"))
 
 (defn validate-shopping-field [field v]
   (first (field (case field
@@ -50,6 +37,3 @@
                   :price    (validate-shopping-form "1" v "2" "3")
                   :tax      (validate-shopping-form "1" "2" v "3")
                   :discount (validate-shopping-form "1" "2" "3" v)))))
-
-
-
