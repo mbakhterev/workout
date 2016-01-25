@@ -25,18 +25,11 @@
            "price should be a number"
            (first (:price (validate-shopping-form "1" "foo" "0" "0")))))))
 
-(comment (defmacro gen-presence-tests []
-  (concat '(are [expected actual] (= expected actual))
-          (mapcat identity
-                  (for [f ["quantity" "price" "tax" "discount"]
-                        v ["" nil]]
-                    [(str f " can't be empty")
-                     (list 'validate-shopping-field (keyword f) v)])))))
-
 (defmacro gen-presence-tests []
   (cons 'do (for [f ["quantity" "price" "tax" "discount"] v ["" nil]]
               (list 'is (list '= (str f " can't be empty")
-                              (list 'validate-shopping-field (keyword f) v))))))
+                                 (list 'validate-shopping-field (keyword f)
+                                                                v))))))
 
 (deftest validate-shopping-quantity-test
   (testing "shopping quantity validation"
