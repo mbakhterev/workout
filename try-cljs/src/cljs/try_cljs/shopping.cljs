@@ -41,23 +41,24 @@
                      (fn [r] (set-value! (by-id "total") (.toFixed r 2)))))
   (prevent-default e))
 
-(defn calculate! [e]
+(defn calculate! []
   (let [args (map (comp value by-id) ["quantity" "price" "tax" "discount"])
         errors (apply validate-shopping-form args)]
     (if-not errors
       (remote-callback :calculate
                        (vec args)
-                       (fn [r] (set-value! (by-id "total") (.toFixed r 2))))))
-  (prevent-default e))
+                       (fn [r] (set-value! (by-id "total") (.toFixed r 2)))))))
 
-(defn validate-shopping-field! [field original]
+(defn validate-shopping-field! [e field original]
   (let [attr (name field)
         label (sel (str "label[for=" attr "]"))]
     (remove-class! label "help")
     (if-let [error (validate-shopping-field field (value (by-id attr)))]
       (do (add-class! label "help")
           (set-text! label error))
-      (set-text! label original))))
+      (do (set-text! label original)
+          (calculate!)
+          (prevent-default e)))))
 
 (defn ^:export init []
   (. js/console log "Initiating")
@@ -72,21 +73,23 @@
            d-text] (map (comp text sel (fn [x] (str  "label[for=" x "]")))
                         ["quantity" "price" "tax" "discount"])]
       (listen-blur! "quantity"
-                    (fn [e] (validate-shopping-field! :quantity q-text)))
+                    (fn [e] (validate-shopping-field! e :quantity q-text)))
 
       (listen-blur! "price"
-                    (fn [e] (validate-shopping-field! :price p-text)))
+                    (fn [e] (validate-shopping-field! e :price p-text)))
 
       (listen-blur! "tax"
-                    (fn [e] (validate-shopping-field! :tax t-text)))
+                    (fn [e] (validate-shopping-field! e :tax t-text)))
 
       (listen-blur! "discount"
-                    (fn [e] (validate-shopping-field! :discount d-text))))
+                    (fn [e] (validate-shopping-field! e :discount d-text))))
 
     (. js/console log "Initiating calculate button")
     (let [listen-calc! (partial listen! (by-id "calc"))]
       (listen-calc! :click
-                    (fn [e] (calculate! e)))
+                    (fn [e]
+                      (calculate!)
+                      (prevent-default e)))
 
       (listen-calc! :mouseover
                     (fn [e] (append! (by-id "shoppingForm")
