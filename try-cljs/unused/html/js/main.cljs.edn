@@ -1,1 +1,0 @@
-{:require [try-cljs.core try-cljs.login try-cljs.shopping] :compiler-options {:asset-path "js/main.out"}}

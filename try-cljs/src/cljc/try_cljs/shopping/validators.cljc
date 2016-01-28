@@ -61,14 +61,14 @@
 
 (defmacro validate-macro [V C]
   (println "expanding" &form)
-  `(validate ~V ~@(macroexpand C)))
+  `(validate ~V ~@(eval C)))
 
 (defn validate-shopping-form [quantity price tax discount]
   (validate-macro {:quantity quantity :price price :tax tax :discount discount}
                   (check-list)))
 
-(comment (macroexpand-all
+(macroexpand-all
   '(defn validate-shopping-form [quantity price tax discount]
     (validate-macro {:quantity quantity :price price :tax tax :discount discount}
-                    (check-list)))))
+                    (checks-fn))))
 
