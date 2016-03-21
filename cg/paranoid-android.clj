@@ -21,7 +21,7 @@
         ; n-additional-elevators: ignore (always zero)
         ; n-elevators: number of elevators
 
-        elevators (repeatedly (* 2 n-elevators) read)]
+        elevators (partition 2 (apply list (repeatedly (* 2 n-elevators) read)))]
     (loop [[clone-floor
             clone-pos
             clone-direction] (repeatedly 3 read)]
@@ -30,13 +30,21 @@
       ; direction: direction of the leading clone: LEFT or RIGHT
 
       (binding [*out* *err*]
-        (println "setup:" setup "setup-len:" (count setup))
-        (println "n-elevators:" n-elevators "elevators:" elevators)
-        (println "clone:" clone-floor clone-pos clone-direction))
+        (prn "setup:" setup "setup-len:" (count setup))
+        (prn "n-elevators:" n-elevators "elevators:" elevators)
+        (prn "clone:" clone-floor clone-pos clone-direction))
 
       ; action: WAIT or BLOCK
       (println "WAIT")
       
       (recur (repeatedly 3 read)))))
 
-; (defn -main [& args] (binding [*out* *err*] (while true (println (read-line)))))
+(defn -main-1 [& args]
+  (let [state (repeatedly 8 read)
+        elevators (repeatedly (* 2 (last state)) read)]
+    (binding [*out* *err*]
+      (println "state:" state)
+      (println "elevators:" elevators))))
+
+(defn -main-2 [& args]
+  (binding [*out* *err*] (while true (println (read-line)))))
