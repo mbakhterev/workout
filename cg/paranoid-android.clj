@@ -1,7 +1,19 @@
 (ns Player (:gen-class))
 
-; Auto-generated code below aims at helping you parse
-; the standard input according to the problem statement.
+(defn- going-right [p P d]
+  (let [e (first (sort-by #(Math/abs %) (map (partial - p) P)))]
+    (or (= 0 e) (= d (if (< 0 e) 'LEFT 'RIGHT)))))
+
+(defn- action [xf xp E cf cp cd]
+  ; xf - exit floor
+  ; xp - exit pos
+  ; E  - elevators
+  ; cf - clone floor
+  ; cp - clone pos
+  ; cd - clone direction
+  (if (going-right cp (if (= xf cf) (list xp) (E cf)) cd)
+    "WAIT"
+    "BLOCK"))
 
 (defn -main [& args]
   (let [[n-floors
@@ -21,7 +33,9 @@
         ; n-additional-elevators: ignore (always zero)
         ; n-elevators: number of elevators
 
-        elevators (repeatedly (* 2 n-elevators) read)]
+        elevators (reduce (fn [R [l x]] (assoc R l (cons x (R l))))
+                          (vec (repeat n-floors '()))
+                          (partition 2 (repeatedly (* 2 n-elevators) read)))]
     (loop [[clone-floor
             clone-pos
             clone-direction] (repeatedly 3 read)]
@@ -35,7 +49,14 @@
         (println "clone:" clone-floor clone-pos clone-direction))
 
       ; action: WAIT or BLOCK
-      (println "WAIT")
+      (println (if (= clone-direction 'NONE)
+                 "WAIT"
+                 (action exit-floor
+                         exit-pos
+                         elevators
+                         clone-floor
+                         clone-pos
+                         clone-direction)))
       
       (recur (repeatedly 3 read)))))
 
