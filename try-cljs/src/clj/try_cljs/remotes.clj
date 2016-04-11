@@ -15,4 +15,3 @@
 
 ; (def app (site (wrap-rpc (var handler))))
 
-(+ 1 2)
