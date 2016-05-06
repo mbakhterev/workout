@@ -1,21 +1,11 @@
-; (ns Player (:gen-class))
-
-(ns boot.user)
-
-(+ 1 2)
+(ns Player (:gen-class))
 
 (defn- height [surface x y]
-  (let [xa (comp first first)
-        xb (comp first second)
-        ya (comp second first)
-        yb (comp second second)
-        cut (first (filter (fn [p] (<= (xa p) x (xb p))) surface))
-        x1 (xa cut)
-        y1 (ya cut)
-        x2 (xb cut)
-        y2 (yb cut)
-        k (float (/ (- y2 y1) (- x2 x1)))
-        yp (+ y1 (* k (- x x1)))]
+  (let [[xa xb ya yb] (for [i [first second] j [first second]] (comp i j))
+        cut           (first (filter (fn [p] (<= (xa p) x (xb p))) surface))
+        [x1 y1 x2 y2] ((juxt xa ya xb yb) cut)
+        k             (float (/ (- y2 y1) (- x2 x1)))
+        yp            (+ y1 (* k (- x x1)))]
     (- y yp)))
 
 (def ^:const M 3.711)
@@ -29,21 +19,9 @@
       nil
       (let [sqrt-D (Math/sqrt D) q (* 2 a)]
         (mapv (fn [op] (/ (op (- b) sqrt-D) q)) [+ -])))))
-; 
-; h = H;
-; v = V;
-; for (i = P; i < 4; i++)
-; {
-;   ht = 0;
-;   hv = 0;
-;   integrate(h, v, &ht, hv);
-;   h += ht;
-;   v += hv
-; }
 
 (defn- thrust [H V P]
   (let [[h v] (reduce integrate [H (- V)] (range P 4))
-;        h (- H pre-h)
         a (- M 4)
         [tp tm] (solve-sq (* 0.5 a) v (- h))]
     (binding [*out* *err*]
