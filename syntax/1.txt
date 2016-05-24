@@ -30,6 +30,14 @@
         yp (+ y1 (* k (- x x1)))]
     (- y yp)))
 
+(defn height [surface x y]
+  (let [[xa xb ya yb] (for [i [first second] j [first second]] (comp i j))
+        cut           (first (filter (fn [p] (<= (xa p) x (xb p))) surface))
+        [x1 y1 x2 y2] (map (fn [f] (f cut)) [xa ya xb yb])
+        k             (float (/ (- y2 y1) (- x2 x1)))
+        yp            (+ y1 (* k (- x x1)))]
+    (- y yp)))
+
 (defn height (surface x y)
   (let ((seq xa xb ya yb) (for (i (seq first second) j (seq first second)) (comp i j))
         cut               (first (filter (fn (p) (<= (xa p) x (xb p))) surface))
