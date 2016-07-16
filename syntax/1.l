@@ -31,3 +31,24 @@
 Всё же, интутивно clojure-ка более красивая. Глаз цепляется за квадратные
 скобки и из этого раскручивается структура. Кроме того, приверженность скобкам
 означает, что мы пока не трогаем математические обозначения.  
+
+(defn score-pairs (hand)
+  (for (sub-hand (take (-> hand count dec) (iterate rest hand))
+        :let (left (first sub-hand))
+        right (rest sub-hand)
+        :when (= (:rank left) (:rank right)))
+    (score 2 "a pair" (vec left right))))
+
+Можно и так, конечно. Но мудрость Clojure в том, что всё же визуально
+различаются разные компоненты.
+
+(defn score-pairs [hand]
+  (for [sub-hand (take (-> hand
+                           count
+                           dec) (iterate rest hand))
+        :let [left (first sub-hand)]
+        right (rest sub-hand)
+        :when (= (:rank left) (:rank right))]
+    (score 2 "a pair" [left right])))
+
+Ладно.
