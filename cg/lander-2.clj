@@ -28,7 +28,8 @@
       (println "HVP:" [H V P] "hv:" [h v] "times:" [tp tm]))
     (if (and tp (< 37 (+ v (* a tp)))) 4 0)))
 
-(defn -main [& args]
+
+(comment (defn -main [& args]
   (let [surface (partition 2 1 (partition 2 (repeatedly (* 2 (read)) read)))]
     (binding [*out* *err*] (println "Surface:" surface))
     (loop [hold 0]
@@ -36,30 +37,22 @@
             h (height surface X Y)]
         (binding [*out* *err*] (println "height:" h "thurst:" power)) 
         (println (str 0 \space (thrust h dy power))) 
-      (recur (inc hold))))))
+      (recur (inc hold)))))))
 
-; Auto-generated code below aims at helping you parse
-; the standard input according to the problem statement.
+(defn- read-surface []
+  (->> (apply list (repeatedly (* 2 (read)) read))
+       (partition 2)
+       (map (fn [p] (apply assoc {} (interleave (list :x :y) p))))
+       (partition 2 1)
+       (map (fn [c] (apply assoc {} (interleave (list :a :b) c))))))
 
-(defn -main-prime [& args]
-  (let [surfaceN (read)]
-    ; surfaceN: the number of points used to draw the surface of Mars.
-    (loop [i surfaceN]
-      (when (> i 0)
-        (let [landX (read) landY (read)]
-          ; landX: X coordinate of a surface point. (0 to 6999)
-          ; landY: Y coordinate of a surface point. By linking all the points together in a sequential fashion, you form the surface of Mars.
-        (recur (dec i)))))
-    (while true
-      (let [X (read) Y (read) hSpeed (read) vSpeed (read) fuel (read) rotate (read) power (read)]
-        ; hSpeed: the horizontal speed (in m/s), can be negative.
-        ; vSpeed: the vertical speed (in m/s), can be negative.
-        ; fuel: the quantity of remaining fuel in liters.
-        ; rotate: the rotation angle in degrees (-90 to 90).
-        ; power: the thrust power (0 to 4).
-        
-        ; (binding [*out* *err*]
-        ;   (println "Debug messages..."))
-        
-        ; 2 integers: rotate power. rotate is the desired rotation angle (should be 0 for level 1), power is the desired thrust power (0 to 4).
-        (println "0 4")))))
+(defn- read-game []
+  (apply assoc {} (interleave (list :x :y :dx :dy :fuel :rotate :power)
+                              (repeatedly 7 read))))
+
+(defn -main [& args]
+  (let [S (read-surface)
+        G (read-game)]
+    (binding [*out* *err*]
+      (println "surface:" S)
+      (println "game:" G))))
