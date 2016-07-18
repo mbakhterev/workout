@@ -39,20 +39,66 @@
         (println (str 0 \space (thrust h dy power))) 
       (recur (inc hold)))))))
 
+(defrecord Point [^double x ^double y])
+(defrecord Section [^Point a ^Point b])
+
+(defrecord Lander [^double x ^double y ^double dx ^double dy
+                   ^double fuel ^double angle ^double power])
+
+(comment (defn- read-surface []
+  (->> (apply list (repeatedly (* 2 (read)) read))
+       (partition 2)
+       (map (fn [p] (apply assoc {} (interleave (list :x :y) (floats p)))))
+       (partition 2 1)
+       (map (fn [c] (apply assoc {} (interleave (list :a :b) c)))))))
+
 (defn- read-surface []
   (->> (apply list (repeatedly (* 2 (read)) read))
        (partition 2)
-       (map (fn [p] (apply assoc {} (interleave (list :x :y) p))))
+       (map (fn [p] (apply ->Point p)))
        (partition 2 1)
-       (map (fn [c] (apply assoc {} (interleave (list :a :b) c))))))
+       (map (fn [c] (apply ->Section c)))))
 
 (defn- read-game []
-  (apply assoc {} (interleave (list :x :y :dx :dy :fuel :rotate :power)
+  (apply assoc {} (interleave (list :x :y :dx :dy :fuel :angle :power)
                               (repeatedly 7 read))))
 
+(defn- read-lander [] (apply ->Lander (repeatedly 7 read)))
+
+(defn- dump [& args] (binding [*out* *err*] (apply println args)))
+
+(defn- find-landing [S]
+  (let [LR (group-by (fn [c] (< -0.01 (- (-> c :a :y) (-> c :b :y)) 0.01)) S)]
+    [(LR true) (LR false)]))
+
+(defn- move [l ^double angle ^double power]
+  (let [[x y dx dy] ((juxt :x :y :dx :dy) l)
+        phi (Math/toRadians angle)
+        ddx (* power (Math/cos phi))
+        ddy (- (* power (Math/sin phi)) M)]
+    {:x   (+ x dx ddx)
+     :y   (+ y dy ddy)
+     :dx  (+ dx ddx)
+     :dy  (+ dy ddy)
+     :angle angle}))
+
 (defn -main [& args]
-  (let [S (read-surface)
-        G (read-game)]
-    (binding [*out* *err*]
-      (println "surface:" S)
-      (println "game:" G))))
+  (let [S (read-surface)      
+        G (read-lander)         
+        [L R] (find-landing S)] 
+
+      ; S - поверхность
+      ; G - начальное состояние игры для анализа направления
+      ; отрезки: L - места для посадки
+      ;          R - опасные места, рядом с которыми не летаем
+
+
+    (dump "surface:" S)
+    (dump "game:" G)
+    (dump "landings:" L)
+    (dump "rocks:" R)
+    
+    (loop [game G]
+      (dump game)
+      (println 81 4)
+      (recur (read-lander)))))
