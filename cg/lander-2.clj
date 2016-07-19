@@ -71,16 +71,24 @@
   (let [LR (group-by (fn [c] (< -0.01 (- (-> c :a :y) (-> c :b :y)) 0.01)) S)]
     [(LR true) (LR false)]))
 
-(defn- move [l ^double angle ^double power]
-  (let [[x y dx dy] ((juxt :x :y :dx :dy) l)
-        phi (Math/toRadians angle)
-        ddx (* power (Math/cos phi))
-        ddy (- (* power (Math/sin phi)) M)]
-    {:x   (+ x dx ddx)
-     :y   (+ y dy ddy)
-     :dx  (+ dx ddx)
-     :dy  (+ dy ddy)
-     :angle angle}))
+; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
+; модуля и то управление, которое привело его в это положение. Положение - это
+; вектор в фазовом пространстве (vec x y dx dy fuel). Нужно быстро считать,
+; поэтому juxt не используем.
+
+; ddx и ddy, потому что угол отсчитывается от оси (+ PI/2)
+
+(defn- move [^Lander l ^double angle ^double power]
+  (let [x    (:x l)
+        y    (:y l)
+        dx   (:dx l)
+        dy   (:dy l)
+        fuel (:fuel l)
+        phi  (Math/toRadians angle)
+        ddx  (* power (Math/sin (- phi)))
+        ddy  (- (* power (Math/cos phi)) M)]
+    (->Lander (+ x dx (* 0.5 ddx)) (+ y dy (* 0.5 ddy)) (+ dx ddx) (+ dy ddy)
+              (- fuel power) angle power)))
 
 (defn -main [& args]
   (let [S (read-surface)      
@@ -98,7 +106,13 @@
     (dump "landings:" L)
     (dump "rocks:" R)
     
-    (loop [game G]
-      (dump game)
+    (loop [game G] 
+      ; (dump game)
       (println 81 4)
-      (recur (read-lander)))))
+
+      (let [next-game (read-lander)
+            model     (move game (:angle next-game) (:power next-game))]
+        (dump "model:" (map (comp (partial format "%.02f") double second) model))
+        (dump "ngame:" (map (comp (partial format "%.02f") double second) next-game))
+
+        (recur next-game)))))
