@@ -34,8 +34,8 @@
 
 ; Функции для доступа в таблицы по значению угла
 
-(defn- ^double x-power [^long phi] (cos-table (+ phi 90)))
-(defn- ^double y-power [^long phi] (sin-table (+ phi 90)))
+(defn- ^double x-power [^long phi] (nth cos-table (+ phi 90)))
+(defn- ^double y-power [^long phi] (nth sin-table (+ phi 90)))
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
 ; модуля и то управление, которое привело его в это положение. Положение - это
@@ -48,8 +48,6 @@
         dx   (:dx l)
         dy   (:dy l)
         fuel (:fuel l)
-;        ddx  (* power (Math/sin (- angle)))
-;        ddy  (- (* power (Math/cos angle)) M)
         ddx (* power (x-power angle))
         ddy (* power (y-power angle))]
     (->Lander (+ x dx (* 0.5 ddx)) (+ y dy (* 0.5 ddy)) (+ dx ddx) (+ dy ddy)
@@ -80,6 +78,32 @@
                                     (range -1.0 2.0)
                                     double-array))
 
+(defn- cutoff [L] L)
+(defn- best-path [L] L)
+
+(defn- gen-lander-cloud [^Lander l]
+  (mapcat (fn [p] (if (== p 0.0)
+                    (list (move l 0 0.0))
+                    (map (fn [a] (move l a p)) (angle-cloud (:angle l)))))
+          (power-cloud (:power l))))
+
+(def ^:const ^long (long runtime-threshold (* 3 1000)))
+
+(comment (defn- search-path [^Lander l]
+  (let [timeout (+ runtime-threshold (System/currentTimeMillis))]
+    (loop [paths (list (list l))]
+      (System/gc)
+      (if (> (System/currentTimeMillis) timeout) 
+        (do (dump "TIMEOUT. Paths processed:" (reduce + (map count paths)))
+            (best-path paths))
+        (recur (mapcat (fn [p] (gen-lander-cloud (first p))) paths)))))))
+
+(defn- lookup-path [^Lander l]
+  (let [timeout (+ runtime-threshold (System/currentTimeMillis))]
+    (loop [paths (list (list l))]
+      (cond (> (System/currentTimeMillis) timeout) (do (dump "TIMEOUT. Paths processed:" (reduce + (map count paths))))
+            :else (recur paths)))))
+
 (defn -main [& args]
   (let [S (read-surface)      
         G (read-lander)         
@@ -97,6 +121,8 @@
     (dump "game:" G)
     (dump "landings:" L)
     (dump "rocks:" R)
+
+    (lookup-path G)
     
     (loop [game G] 
       (println 81 4)
