@@ -13,17 +13,13 @@
        (partition 2 1)
        (map (fn [c] (apply ->Section c)))))
 
-(defn- read-game []
-  (apply assoc {} (interleave (list :x :y :dx :dy :fuel :angle :power)
-                              (repeatedly 7 read))))
-
 (defn- read-lander [] (apply ->Lander (repeatedly 7 read)))
 
 (defn- dump [& args] (binding [*out* *err*] (apply println args)))
 
 (defn- find-landing [S]
   (let [LR (group-by (fn [c] (< -0.01 (- (-> c :a :y) (-> c :b :y)) 0.01)) S)]
-    [(LR true) (LR false)]))
+    [(first (LR true)) (LR false)]))
 
 ; Синусы и косинусы для рассчёта проекции тяги. Угол задаётся от оси (+ PI/2).
 ; Симметричность cos не учитываем, чтобы не усложнять формулу пересчёта угла phi в
@@ -81,37 +77,29 @@
 (defn- cutoff [L] L)
 (defn- best-path [L] L)
 
-(defn- gen-path-cloud [path]
-  (let [l (first path)]
+; Мы не хотим рассматривать варианты, ускоряющие уход от посадочной площадки. 
+
+(defn- ^long select-direction [^Lander l ^Section target]
+  )
+
+(defn- gen-path-cloud [path ^Section target]
+  (let [l   (first path)
+        P   (power-cloud (:power l))
+        dir (select-direction l target)
+        A   (filter (fn [a] (< 0 (* a dir))) (angle-cloud (:angle l)))]
     (mapcat (fn [p] (if (== p 0.0)
                       (list (cons (move l 0 0.0) path))
-                      (map (fn [a] (cons (move l a p) path)) (angle-cloud (:angle l)))))
-              (power-cloud (:power l)))))
+                      (map (fn [a] (cons (move l a p) path)) A))) P)))
 
-(def ^:const ^long runtime-threshold (* 4 1000 1000))
-
-(comment (defn- search-path [^Lander l]
-  (let [timeout (+ runtime-threshold (System/nanoTime))]
-    (loop [paths (list (list l))]
-      (if (< timeout (System/nanoTime)) 
-        (do (dump "TIMEOUT. Paths processed:" (reduce + (map count paths)))
-            (best-path paths))
-        (recur (mapcat (fn [p] (gen-lander-cloud (first p))) paths))))))
-
-(defn- lookup-path [^Lander l]
-  (let [timeout (+ runtime-threshold (System/nanoTime))]
-    (dump "looking path till:" timeout)
-    (loop [paths (list (list l)) its 0]
-      (cond (> (System/nanoTime) timeout)
-              (do (dump "TIMEOUT. Paths processed:" (reduce + (map count paths)))
-                  (dump "TIMEOUT. Iteration count:" its))
-
-            :else (recur paths (inc its)))))))
+(def ^:const ^long runtime-threshold (* 3))
 
 (defn- lookup-path [^Lander l]
   (loop [paths (list (list l)) iterations 0]
-    (cond (> iterations runtime-threshold) (do (dump "TIMEOUT"))
-          :else (recur paths (inc iterations)))))
+    (cond (> iterations runtime-threshold)
+          (do (dump "TIMEOUT. Paths generated:" (count paths)))
+
+          :else
+          (recur (mapcat gen-path-cloud paths) (inc iterations)))))
 
 (defn -main [& args]
   (let [S (read-surface)      
