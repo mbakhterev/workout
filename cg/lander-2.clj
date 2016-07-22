@@ -81,28 +81,37 @@
 (defn- cutoff [L] L)
 (defn- best-path [L] L)
 
-(defn- gen-lander-cloud [^Lander l]
-  (mapcat (fn [p] (if (== p 0.0)
-                    (list (move l 0 0.0))
-                    (map (fn [a] (move l a p)) (angle-cloud (:angle l)))))
-          (power-cloud (:power l))))
+(defn- gen-path-cloud [path]
+  (let [l (first path)]
+    (mapcat (fn [p] (if (== p 0.0)
+                      (list (cons (move l 0 0.0) path))
+                      (map (fn [a] (cons (move l a p) path)) (angle-cloud (:angle l)))))
+              (power-cloud (:power l)))))
 
-(def ^:const ^long (long runtime-threshold (* 3 1000)))
+(def ^:const ^long runtime-threshold (* 4 1000 1000))
 
 (comment (defn- search-path [^Lander l]
-  (let [timeout (+ runtime-threshold (System/currentTimeMillis))]
+  (let [timeout (+ runtime-threshold (System/nanoTime))]
     (loop [paths (list (list l))]
-      (System/gc)
-      (if (> (System/currentTimeMillis) timeout) 
+      (if (< timeout (System/nanoTime)) 
         (do (dump "TIMEOUT. Paths processed:" (reduce + (map count paths)))
             (best-path paths))
-        (recur (mapcat (fn [p] (gen-lander-cloud (first p))) paths)))))))
+        (recur (mapcat (fn [p] (gen-lander-cloud (first p))) paths))))))
 
 (defn- lookup-path [^Lander l]
-  (let [timeout (+ runtime-threshold (System/currentTimeMillis))]
-    (loop [paths (list (list l))]
-      (cond (> (System/currentTimeMillis) timeout) (do (dump "TIMEOUT. Paths processed:" (reduce + (map count paths))))
-            :else (recur paths)))))
+  (let [timeout (+ runtime-threshold (System/nanoTime))]
+    (dump "looking path till:" timeout)
+    (loop [paths (list (list l)) its 0]
+      (cond (> (System/nanoTime) timeout)
+              (do (dump "TIMEOUT. Paths processed:" (reduce + (map count paths)))
+                  (dump "TIMEOUT. Iteration count:" its))
+
+            :else (recur paths (inc its)))))))
+
+(defn- lookup-path [^Lander l]
+  (loop [paths (list (list l)) iterations 0]
+    (cond (> iterations runtime-threshold) (do (dump "TIMEOUT"))
+          :else (recur paths (inc iterations)))))
 
 (defn -main [& args]
   (let [S (read-surface)      
@@ -122,9 +131,10 @@
     (dump "landings:" L)
     (dump "rocks:" R)
 
-    (lookup-path G)
-    
+      
     (loop [game G] 
+      (lookup-path game)
+
       (println 81 4)
 
       (let [next-game (read-lander)
