@@ -6,6 +6,8 @@
 (defrecord Lander [^double x ^double y ^double dx ^double dy
                    ^long fuel ^long angle ^long power])
 
+(defrecord Fitness [^double fitness path])
+
 (defn- read-surface []
   (->> (apply list (repeatedly (* 2 (read)) read))
        (partition 2)
@@ -17,6 +19,8 @@
 
 (defn- dump [& args] (binding [*out* *err*] (apply println args)))
 
+(defn- ^boolean is-pad [^Segment s] (< -0.01 (- (-> c :a :y) (-> c :b :y)) 0.01))
+
 (defn- find-landing [S]
   (let [LR (group-by (fn [c] (< -0.01 (- (-> c :a :y) (-> c :b :y)) 0.01)) S)]
     [(first (LR true)) (LR false)]))
@@ -25,13 +29,18 @@
 ; Симметричность cos не учитываем, чтобы не усложнять формулу пересчёта угла phi в
 ; индекс таблицы i. Формула должна быть такой i = phi + 90
 
-(def ^:const ^doubles cos-table (mapv (fn [d] (Math/cos (Math/toRadians (+ d 90)))) (range -90 91)))
-(def ^:const ^doubles sin-table (mapv (fn [d] (Math/sin (Math/toRadians (+ d 90)))) (range -90 91)))
+(def ^:const ^doubles cos-table
+  (mapv (fn [d] (Math/cos (Math/toRadians (+ d 90)))) (range -90 91)))
+
+(def ^:const ^doubles sin-table
+  (mapv (fn [d] (Math/sin (Math/toRadians (+ d 90)))) (range -90 91)))
 
 ; Функции для доступа в таблицы по значению угла
 
 (defn- ^double x-power [^long phi] (nth cos-table (+ phi 90)))
 (defn- ^double y-power [^long phi] (nth sin-table (+ phi 90)))
+
+(defn- ^double fitness [^Lander l ^Section target ^double energy] 0.0)
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
 ; модуля и то управление, которое привело его в это положение. Положение - это
@@ -79,8 +88,12 @@
 
 ; Мы не хотим рассматривать варианты, ускоряющие уход от посадочной площадки. 
 
-(defn- ^long select-direction [^Lander l ^Section target]
-  )
+(comment (defn- ^long select-direction [^Lander l ^Section target]
+  (let [x  (:x l)
+        dx (:dx l)
+        ax (-> :x :a target)
+        bx (-> :x :b target)]
+    (cond (<= ax x bx) nil )))
 
 (defn- gen-path-cloud [path ^Section target]
   (let [l   (first path)
@@ -89,7 +102,18 @@
         A   (filter (fn [a] (< 0 (* a dir))) (angle-cloud (:angle l)))]
     (mapcat (fn [p] (if (== p 0.0)
                       (list (cons (move l 0 0.0) path))
-                      (map (fn [a] (cons (move l a p) path)) A))) P)))
+                      (map (fn [a] (cons (move l a p) path)) A))) P))))
+
+
+; Проблема, однако, в том, что можно придумать сценарии с различными поведениями
+; в разных режимах полёта. Не очевидно, как ограничивать возможные варианты
+; управления. Поэтому рассматриваем всё с последующим обрезанием плохих
+; траекторий
+
+(defn- gen-path-cloud [path]
+  (let [l (first path)]
+    (for [p (power-cloud (:power l)) a (angle-cloud (:angle l))] 
+      (cons (move l a p) path))))
 
 (def ^:const ^long runtime-threshold (* 3))
 
@@ -111,14 +135,12 @@
       ; отрезки: L - места для посадки
       ;          R - опасные места, рядом с которыми не летаем
 
-
     (dump "power-cloud:" power-cloud)
     (dump "angle-cloud:" (take 5 (drop 5 angle-cloud-table)))
     (dump "surface:" S)
     (dump "game:" G)
     (dump "landings:" L)
     (dump "rocks:" R)
-
       
     (loop [game G] 
       (lookup-path game)
