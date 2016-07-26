@@ -19,7 +19,7 @@
 
 (defn- dump [& args] (binding [*out* *err*] (apply println args)))
 
-(defn- ^boolean is-pad [^Segment s] (< -0.01 (- (-> c :a :y) (-> c :b :y)) 0.01))
+(defn- ^boolean is-pad [^Section c] (< -0.01 (- (-> c :a :y) (-> c :b :y)) 0.01))
 
 ; Берём первую попавшуюся посадочную площадку. Нам, кажется, гарантируют, что
 ; она одна такая
@@ -45,19 +45,21 @@
 ; Функция оценки качества траектории
 
 (defn- ^double fitness [^Lander l ^Section target ^double energy]
-  (let [x   (:x l)
-        y   (:y l)
-        dx  (:dx l)
-        dy  (:dy l)
-        phi (:angle l)
-        h   (-> target :a :y)
-        ax  (-> target :a :x)
-        bx  (-> target :b :x)]
-    (+ (if (<= ax x bx) 0.0 (min (Math/abs (- x ax)) (Math/abs (-x bx))))
+  (let [x    (:x l)
+        y    (:y l)
+        adx  (Math/abs (:dx l))
+        ady  (Math/abs (:dy l))
+        phi  (:angle l)
+        fuel (:fuel l)
+        h    (-> target :a :y)
+        ax   (-> target :a :x)
+        bx   (-> target :b :x)]
+    (+ (if (<= ax x bx) 0.0 (min (Math/abs (- x ax)) (Math/abs (- x bx))))
        (Math/abs (- y h))
        (Math/abs phi)
-       (* 0.5 (- 40 dy) (- 40 dy))
-       (* 0.5 (- 20 dx) (- 20 dy)))))
+       (if (<= ady 40.0) 0.0 (* 0.5 (- 40 ady) (- 40 ady)))
+       (if (<= adx 20.0) 0.0 (* 0.5 (- 20 adx) (- 20 adx)))
+       (if (<= fuel 0) 1.0 (/ 1.0 fuel)))))
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
 ; модуля и то управление, которое привело его в это положение. Положение - это
@@ -109,20 +111,38 @@
     (for [p (power-cloud (:power l)) a (angle-cloud (:angle l))] 
       (cons (move l a p) path))))
 
-; Пересчёт ценностей путей в списке P
+; Пересчёт ценностей путей в списке P. Возвращаем отсортированный список
 
 (defn- evaluate-paths [P ^Section target]
-  (map (fn [p] (->Fitness (fitness (first p) target 0.0) p)) P))
+  (sort-by :fitness (map (fn [p] (->Fitness (fitness (first p) target 0.0) p)) P)))
 
-(def ^:const ^long runtime-threshold (* 3))
+; Слияние отсортированных по fitness последовательностей. Чем fitness меньше,
+; тем лучше
 
-(defn- lookup-path [^Lander l]
-  (loop [paths (list (list l)) iterations 0]
-    (cond (> iterations runtime-threshold)
-          (do (dump "TIMEOUT. Paths generated:" (count paths)))
+(defn- merge-fitness [paths-p paths-q]
+  (loop [P paths-p
+         Q paths-q
+         R (transient [])]
+    (let [p (first P)
+          q (first Q)]
+      (cond (nil? p) (concat (persistent! R) Q)
+            (nil? q) (concat (persistent! R) P)
+
+            (< (:fitness p) (:fitness q)) (recur (rest P) Q (conj! R p))
+            :else                         (recur P (rest Q) (conj! R q))))))
+
+(def ^:const ^long runtime-threshold (* 128))
+
+(defn- lookup-path [^Lander l ^Section target]
+  (loop [P (evaluate-paths (list (list l)) target)
+         its 0]
+    (cond (> its runtime-threshold)
+            (do (dump "TIMEOUT. Paths generated:" (count P)))
 
           :else
-          (recur (mapcat path-cloud paths) (inc iterations)))))
+            (recur (-> (path-cloud (:path (first P)))
+                       (evaluate-paths target)
+                       (merge-fitness (rest P))) (inc its)))))
 
 (defn -main [& args]
   (let [S (read-surface)      
@@ -142,7 +162,7 @@
     (dump "rocks:" R)
       
     (loop [game G] 
-      (lookup-path game)
+      (lookup-path game L)
 
       (println 81 4)
 
