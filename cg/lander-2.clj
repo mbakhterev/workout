@@ -54,11 +54,11 @@
         h    (-> target :a :y)
         ax   (-> target :a :x)
         bx   (-> target :b :x)]
-    (+ (/ (if (<= ax x bx) 0.0 (min (Math/abs (- x ax)) (Math/abs (- x bx)))) 7000)
-       (/ (Math/abs (- y h)) 3000)
+    (+ (/ (if (<= ax x bx) 0.0 (min (Math/abs (- x ax)) (Math/abs (- x bx)))) 30)
+       (/ (Math/abs (- y h)) 7000)
        (/ (Math/abs phi) 90)
-       (/ (if (<= ady 40.0) 0.0 (* 0.5 (- 40 ady) (- 40 ady))) 40)
-       (/ (if (<= adx 20.0) 0.0 (* 0.5 (- 20 adx) (- 20 adx))) 20)
+       (/ (if (<= ady 40.0) 0.0 (- ady 40.0)) 40)
+       (/ (if (<= adx 20.0) 0.0 (- adx 20.0)) 20)
        (if (<= fuel 0) 1.0 (/ 1.0 fuel)))))
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
@@ -146,9 +146,14 @@
                        (evaluate-paths target)
                        (merge-fitness (rest P))) (inc its)))))
 
+(defn- ^boolean not-aligned [^Lander l ^Lander m]
+  (let [c (juxt :x :y :dx :dy)] (> (Math/sqrt (reduce + (map (comp (fn [x] (* x x)) -) (c l) (c m)))) 4)))
+
+(defn- dump-lander [desc ^Lander l]
+  (dump desc \tab (map (comp (partial format "%.02f") double second) l)))
+
 (defn -main [& args]
   (let [S (read-surface)      
-        G (read-lander)         
         [L R] (find-landing S)] 
 
       ; S - поверхность
@@ -159,11 +164,11 @@
     (dump "power-cloud:" power-cloud)
     (dump "angle-cloud:" (take 5 (drop 5 angle-cloud-table)))
     (dump "surface:" S)
-    (dump "game:" G)
+    (comment (dump "game:" G))
     (dump "landings:" L)
     (dump "rocks:" R)
       
-    (loop [game G] 
+    (comment (loop [l (read-lander) P (lookup-path l L)] 
       (comment (lookup-path game L) (println 81 4))
 
       (let [p (second (lookup-path game L))] (println (:angle p) (:power p)))
@@ -173,4 +178,28 @@
         (dump "model:" (map (comp (partial format "%.02f") double second) model))
         (dump "ngame:" (map (comp (partial format "%.02f") double second) next-game))
 
-        (recur next-game)))))
+        (recur next-game))))
+    
+    (loop [l (read-lander)
+           P (lookup-path l L)]
+      (let [prediction (first P)]
+        (dump-lander "lander:" l)
+        (dump-lander "prediction:" prediction)
+        
+        (if (not-aligned l prediction)
+          (let [path (lookup-path l L)
+                control (second path)]
+            (dump "DIVERGENCE")
+            (println (:angle control) (:power control))
+            (recur (read-lander) (rest path)))
+
+          (if-let [control (second P)]
+            (do (println (:angle control) (:power control))
+                (recur (read-lander) (rest P)))
+
+            (let [path (lookup-path l L)
+                  control (second path)]
+              (dump "END OF PATH")
+              (println (:angle control) (:power control))
+              (recur (read-lander) (rest path)))))))))
+
