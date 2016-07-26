@@ -54,11 +54,11 @@
         h    (-> target :a :y)
         ax   (-> target :a :x)
         bx   (-> target :b :x)]
-    (+ (if (<= ax x bx) 0.0 (min (Math/abs (- x ax)) (Math/abs (- x bx))))
-       (Math/abs (- y h))
-       (Math/abs phi)
-       (if (<= ady 40.0) 0.0 (* 0.5 (- 40 ady) (- 40 ady)))
-       (if (<= adx 20.0) 0.0 (* 0.5 (- 20 adx) (- 20 adx)))
+    (+ (/ (if (<= ax x bx) 0.0 (min (Math/abs (- x ax)) (Math/abs (- x bx)))) 7000)
+       (/ (Math/abs (- y h)) 3000)
+       (/ (Math/abs phi) 90)
+       (/ (if (<= ady 40.0) 0.0 (* 0.5 (- 40 ady) (- 40 ady))) 40)
+       (/ (if (<= adx 20.0) 0.0 (* 0.5 (- 20 adx) (- 20 adx))) 20)
        (if (<= fuel 0) 1.0 (/ 1.0 fuel)))))
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
@@ -137,7 +137,9 @@
   (loop [P (evaluate-paths (list (list l)) target)
          its 0]
     (cond (> its runtime-threshold)
-            (do (dump "TIMEOUT. Paths generated:" (count P)))
+            (do (dump "TIMEOUT. Paths generated:" (count P)
+                      "max depth:" (apply max (map (comp count :path) P)))
+                (reverse (:path (first P))))
 
           :else
             (recur (-> (path-cloud (:path (first P)))
@@ -162,9 +164,9 @@
     (dump "rocks:" R)
       
     (loop [game G] 
-      (lookup-path game L)
+      (comment (lookup-path game L) (println 81 4))
 
-      (println 81 4)
+      (let [p (second (lookup-path game L))] (println (:angle p) (:power p)))
 
       (let [next-game (read-lander)
             model     (move game (:angle next-game) (:power next-game))]
