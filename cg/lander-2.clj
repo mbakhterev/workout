@@ -21,9 +21,11 @@
 
 (defn- ^boolean is-pad [^Segment s] (< -0.01 (- (-> c :a :y) (-> c :b :y)) 0.01))
 
+; Берём первую попавшуюся посадочную площадку. Нам, кажется, гарантируют, что
+; она одна такая
+
 (defn- find-landing [S]
-  (let [LR (group-by (fn [c] (< -0.01 (- (-> c :a :y) (-> c :b :y)) 0.01)) S)]
-    [(first (LR true)) (LR false)]))
+  (let [LR (group-by is-pad S)] [(first (LR true)) (LR false)]))
 
 ; Синусы и косинусы для рассчёта проекции тяги. Угол задаётся от оси (+ PI/2).
 ; Симметричность cos не учитываем, чтобы не усложнять формулу пересчёта угла phi в
@@ -40,7 +42,22 @@
 (defn- ^double x-power [^long phi] (nth cos-table (+ phi 90)))
 (defn- ^double y-power [^long phi] (nth sin-table (+ phi 90)))
 
-(defn- ^double fitness [^Lander l ^Section target ^double energy] 0.0)
+; Функция оценки качества траектории
+
+(defn- ^double fitness [^Lander l ^Section target ^double energy]
+  (let [x   (:x l)
+        y   (:y l)
+        dx  (:dx l)
+        dy  (:dy l)
+        phi (:angle l)
+        h   (-> target :a :y)
+        ax  (-> target :a :x)
+        bx  (-> target :b :x)]
+    (+ (if (<= ax x bx) 0.0 (min (Math/abs (- x ax)) (Math/abs (-x bx))))
+       (Math/abs (- y h))
+       (Math/abs phi)
+       (* 0.5 (- 40 dy) (- 40 dy))
+       (* 0.5 (- 20 dx) (- 20 dy)))))
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
 ; модуля и то управление, которое привело его в это положение. Положение - это
@@ -53,8 +70,8 @@
         dx   (:dx l)
         dy   (:dy l)
         fuel (:fuel l)
-        ddx (* power (x-power angle))
-        ddy (* power (y-power angle))]
+        ddx  (* power (x-power angle))
+        ddy  (* power (y-power angle))]
     (->Lander (+ x dx (* 0.5 ddx)) (+ y dy (* 0.5 ddy)) (+ dx ddx) (+ dy ddy)
               (- fuel power) angle power)))
 
@@ -83,37 +100,19 @@
                                     (range -1.0 2.0)
                                     double-array))
 
-(defn- cutoff [L] L)
-(defn- best-path [L] L)
+; Можно придумать сценарии с различными полезными поведениями в разных режимах
+; полёта. Не очевидно, как ограничивать возможные варианты управления. Поэтому
+; рассматриваем всё с последующим обрезанием плохих траекторий
 
-; Мы не хотим рассматривать варианты, ускоряющие уход от посадочной площадки. 
-
-(comment (defn- ^long select-direction [^Lander l ^Section target]
-  (let [x  (:x l)
-        dx (:dx l)
-        ax (-> :x :a target)
-        bx (-> :x :b target)]
-    (cond (<= ax x bx) nil )))
-
-(defn- gen-path-cloud [path ^Section target]
-  (let [l   (first path)
-        P   (power-cloud (:power l))
-        dir (select-direction l target)
-        A   (filter (fn [a] (< 0 (* a dir))) (angle-cloud (:angle l)))]
-    (mapcat (fn [p] (if (== p 0.0)
-                      (list (cons (move l 0 0.0) path))
-                      (map (fn [a] (cons (move l a p) path)) A))) P))))
-
-
-; Проблема, однако, в том, что можно придумать сценарии с различными поведениями
-; в разных режимах полёта. Не очевидно, как ограничивать возможные варианты
-; управления. Поэтому рассматриваем всё с последующим обрезанием плохих
-; траекторий
-
-(defn- gen-path-cloud [path]
+(defn- path-cloud [path]
   (let [l (first path)]
     (for [p (power-cloud (:power l)) a (angle-cloud (:angle l))] 
       (cons (move l a p) path))))
+
+; Пересчёт ценностей путей в списке P
+
+(defn- evaluate-paths [P ^Section target]
+  (map (fn [p] (->Fitness (fitness (first p) target 0.0) p)) P))
 
 (def ^:const ^long runtime-threshold (* 3))
 
@@ -123,7 +122,7 @@
           (do (dump "TIMEOUT. Paths generated:" (count paths)))
 
           :else
-          (recur (mapcat gen-path-cloud paths) (inc iterations)))))
+          (recur (mapcat path-cloud paths) (inc iterations)))))
 
 (defn -main [& args]
   (let [S (read-surface)      
