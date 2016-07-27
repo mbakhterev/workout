@@ -42,29 +42,14 @@
 (defn- ^double x-power [^long phi] (nth cos-table (+ phi 90)))
 (defn- ^double y-power [^long phi] (nth sin-table (+ phi 90)))
 
-; Функция оценки качества траектории
 
-(defn- ^double fitness [^Lander l ^Section target ^double energy]
-  (let [x    (:x l)
-        y    (:y l)
-        adx  (Math/abs (:dx l))
-        ady  (Math/abs (:dy l))
-        phi  (:angle l)
-        fuel (:fuel l)
-        h    (-> target :a :y)
-        ax   (-> target :a :x)
-        bx   (-> target :b :x)]
-    (+ (/ (if (<= ax x bx) 0.0 (min (Math/abs (- x ax)) (Math/abs (- x bx)))) 30)
-       (/ (Math/abs (- y h)) 7000)
-       (/ (Math/abs phi) 90)
-       (/ (if (<= ady 40.0) 0.0 (- ady 40.0)) 40)
-       (/ (if (<= adx 20.0) 0.0 (- adx 20.0)) 20)
-       (if (<= fuel 0) 1.0 (/ 1.0 fuel)))))
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
 ; модуля и то управление, которое привело его в это положение. Положение - это
 ; вектор в фазовом пространстве (vec x y dx dy fuel). Нужно быстро считать,
 ; поэтому juxt не используем.
+
+(def ^:const ^double M 3.711)
 
 (defn- ^Lander move [^Lander l ^long angle ^double power]
   (let [x    (:x l)
@@ -73,7 +58,7 @@
         dy   (:dy l)
         fuel (:fuel l)
         ddx  (* power (x-power angle))
-        ddy  (* power (y-power angle))]
+        ddy  (- (* power (y-power angle)) M)]
     (->Lander (+ x dx (* 0.5 ddx)) (+ y dy (* 0.5 ddy)) (+ dx ddx) (+ dy ddy)
               (- fuel power) angle power)))
 
@@ -111,6 +96,25 @@
     (for [p (power-cloud (:power l)) a (angle-cloud (:angle l))] 
       (cons (move l a p) path))))
 
+; Функция оценки качества траектории
+
+(defn- ^double fitness [^Lander l ^Section target ^double energy]
+  (let [x    (:x l)
+        y    (:y l)
+        adx  (Math/abs (:dx l))
+        ady  (Math/abs (:dy l))
+        phi  (:angle l)
+        fuel (:fuel l)
+        h    (-> target :a :y)
+        ax   (-> target :a :x)
+        bx   (-> target :b :x)]
+    (+ (/ (if (<= ax x bx) 0.0 (min (Math/abs (- x ax)) (Math/abs (- x bx)))) 3000)
+       (/ (Math/abs (- y h)) 7000)
+       (/ (Math/abs phi) 90)
+       (/ (if (<= ady 40.0) 0.0 (- ady 40.0)) 40)
+       (/ (if (<= adx 20.0) 0.0 (- adx 20.0)) 20)
+       (if (<= fuel 0) 1.0 (/ 1.0 fuel)))))
+
 ; Пересчёт ценностей путей в списке P. Возвращаем отсортированный список
 
 (defn- evaluate-paths [P ^Section target]
@@ -147,14 +151,14 @@
                        (merge-fitness (rest P))) (inc its)))))
 
 (defn- ^boolean not-aligned [^Lander l ^Lander m]
-  (let [c (juxt :x :y :dx :dy)] (> (Math/sqrt (reduce + (map (comp (fn [x] (* x x)) -) (c l) (c m)))) 4)))
+  (let [c (juxt :x :y :dx :dy)] (> (Math/sqrt (reduce + (map (comp (fn [x] (* x x)) -) (c l) (c m)))) 2.0)))
 
 (defn- dump-lander [desc ^Lander l]
   (dump desc \tab (map (comp (partial format "%.02f") double second) l)))
 
 (defn -main [& args]
   (let [S (read-surface)      
-        [L R] (find-landing S)] 
+        [target R] (find-landing S)] 
 
       ; S - поверхность
       ; G - начальное состояние игры для анализа направления
@@ -164,42 +168,27 @@
     (dump "power-cloud:" power-cloud)
     (dump "angle-cloud:" (take 5 (drop 5 angle-cloud-table)))
     (dump "surface:" S)
-    (comment (dump "game:" G))
-    (dump "landings:" L)
+    (dump "landings:" target)
     (dump "rocks:" R)
       
-    (comment (loop [l (read-lander) P (lookup-path l L)] 
-      (comment (lookup-path game L) (println 81 4))
-
-      (let [p (second (lookup-path game L))] (println (:angle p) (:power p)))
-
-      (let [next-game (read-lander)
-            model     (move game (:angle next-game) (:power next-game))]
-        (dump "model:" (map (comp (partial format "%.02f") double second) model))
-        (dump "ngame:" (map (comp (partial format "%.02f") double second) next-game))
-
-        (recur next-game))))
-    
     (loop [l (read-lander)
-           P (lookup-path l L)]
-      (let [prediction (first P)]
+           P (lookup-path l target)]
+      (let [prediction (first P)
+            control (second P)
+            trouble (cond (nil? control) "END OF PATH"
+                          (not-aligned l prediction) "DIVERGENCE")]
+
         (dump-lander "lander:" l)
         (dump-lander "prediction:" prediction)
         
-        (if (not-aligned l prediction)
-          (let [path (lookup-path l L)
-                control (second path)]
-            (dump "DIVERGENCE")
-            (println (:angle control) (:power control))
-            (recur (read-lander) (rest path)))
-
-          (if-let [control (second P)]
-            (do (println (:angle control) (:power control))
-                (recur (read-lander) (rest P)))
-
-            (let [path (lookup-path l L)
-                  control (second path)]
-              (dump "END OF PATH")
+        (if trouble
+          (let [new-path (lookup-path l target)
+                new-control (second new-path)]
+            (dump trouble)
+            (println (:angle new-control) (:power new-control))
+            (recur (read-lander) (rest new-path)))
+              
+          (do (dump "ON THE COURSE")
               (println (:angle control) (:power control))
-              (recur (read-lander) (rest path)))))))))
+              (recur (read-lander) (rest P))))))))
 
