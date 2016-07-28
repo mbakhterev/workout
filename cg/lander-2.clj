@@ -1,35 +1,32 @@
 (ns Player (:gen-class))
 
 (defrecord Point [^double x ^double y])
-(defrecord Section [^Point a ^Point b])
+
+; mx - это середина отрезка по оси x. Может оказаться полезной для fitness.
+; Считаем заранее
+
+(defrecord Section [^double ax ^double ay ^double bx ^double by
+                    ^double k ^double mx])
+
+(defn- make-section [^Point a ^Point b]
+  (Section. (:x a) (:y a) (:x b) (:y b)
+            (double (/ (- (:y b) (:y a))
+                       (- (:x b) (:x a))))
+            (+ (:x a)
+               (/ (- (:x b) (:x a)) 2.0))))
 
 (defrecord Lander [^double x ^double y ^double dx ^double dy
                    ^long fuel ^long angle ^long power])
 
 (defrecord Fitness [^double fitness path])
 
-(defn- read-surface []
-  (->> (apply list (repeatedly (* 2 (read)) read))
-       (partition 2)
-       (map (fn [p] (apply ->Point p)))
-       (partition 2 1)
-       (map (fn [c] (apply ->Section c)))))
-
 (defn- read-lander [] (apply ->Lander (repeatedly 7 read)))
 
 (defn- dump [& args] (binding [*out* *err*] (apply println args)))
 
-(defn- ^boolean is-pad [^Section c] (< -0.01 (- (-> c :a :y) (-> c :b :y)) 0.01))
-
-; Берём первую попавшуюся посадочную площадку. Нам, кажется, гарантируют, что
-; она одна такая
-
-(defn- find-landing [S]
-  (let [LR (group-by is-pad S)] [(first (LR true)) (LR false)]))
-
 ; Синусы и косинусы для рассчёта проекции тяги. Угол задаётся от оси (+ PI/2).
-; Симметричность cos не учитываем, чтобы не усложнять формулу пересчёта угла phi в
-; индекс таблицы i. Формула должна быть такой i = phi + 90
+; Симметричность cos не учитываем, чтобы не усложнять формулу пересчёта угла phi
+; в индекс таблицы i. Формула должна быть такой i = phi + 90
 
 (def ^:const ^doubles cos-table
   (mapv (fn [d] (Math/cos (Math/toRadians (+ d 90)))) (range -90 91)))
@@ -41,8 +38,6 @@
 
 (defn- ^double x-power [^long phi] (nth cos-table (+ phi 90)))
 (defn- ^double y-power [^long phi] (nth sin-table (+ phi 90)))
-
-
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
 ; модуля и то управление, которое привело его в это положение. Положение - это
@@ -105,9 +100,9 @@
         ady  (Math/abs (:dy l))
         phi  (:angle l)
         fuel (:fuel l)
-        h    (-> target :a :y)
-        ax   (-> target :a :x)
-        bx   (-> target :b :x)]
+        h    (-> target :ay)
+        ax   (-> target :ax)
+        bx   (-> target :bx)]
     (+ (/ (if (<= ax x bx) 0.0 (min (Math/abs (- x ax)) (Math/abs (- x bx)))) 3000)
        (/ (Math/abs (- y h)) 7000)
        (/ (Math/abs phi) 90)
@@ -151,14 +146,57 @@
                        (merge-fitness (rest P))) (inc its)))))
 
 (defn- ^boolean not-aligned [^Lander l ^Lander m]
-  (let [c (juxt :x :y :dx :dy)] (> (Math/sqrt (reduce + (map (comp (fn [x] (* x x)) -) (c l) (c m)))) 2.0)))
+  (let [c (juxt :x :y :dx :dy)]
+    (> (Math/sqrt (reduce + (map (comp (fn [x] (* x x)) -) (c l) (c m)))) 2.0)))
 
-(defn- dump-lander [desc ^Lander l]
+(defn- dump-lander [^String desc ^Lander l]
   (dump desc \tab (map (comp (partial format "%.02f") double second) l)))
 
+(defn- read-surface-points []
+  (->> (apply list (repeatedly (* 2 (read)) read))
+       (partition 2)
+       (map (fn [p] (apply ->Point p)))))
+
+(defn- read-surface []
+  (->> (read-surface-points)
+       (partition 2 1)
+       (map (fn [c] (apply make-section c)))))
+
+; Берём первую попавшуюся посадочную площадку. Нам, кажется, гарантируют, что
+; она одна такая
+
+(defn- reconstruct-surface [points]
+  (letfn [(^boolean is-pad [[^Point a ^Point b]]
+            (< -0.01 (- (:y a) (:y b)) 0.01))
+
+          (find-target [points] (first (filter is-pad (partition 2 1 points))))
+
+          (monotonize [points]
+            (loop [[p & P] (rest points)
+                   max-y (:y (first points))
+                   R [(first points)]]
+              (cond (empty? P)
+                    (conj R (if (> (:y p) max-y) p (->Point (:x p) max-y)))
+
+                    (> (:y p) max-y) (recur P (:y p) (conj R p))
+                    :else (recur P max-y R))))
+          
+          (sectionize [points]
+            (map (fn [c] (apply make-section c)) (partition 2 1 points)))]
+
+    (let [[target-a target-b] (find-target points)
+          points-l (filter (fn [p] (<= (:x p) (:x target-a))) points)
+          points-r (filter (fn [p] (>= (:x p) (:x target-b))) points)
+          mono-l (reverse (monotonize (reverse points-l)))
+          mono-r (monotonize points-r)]
+
+      (dump "target a:" target-a "target-b:" target-b)
+
+      [(make-section target-a target-b)
+       (vec (concat (sectionize mono-l) (sectionize mono-r)))])))
+
 (defn -main [& args]
-  (let [S (read-surface)      
-        [target R] (find-landing S)] 
+  (let [[target rocks] (reconstruct-surface (read-surface-points))] 
 
       ; S - поверхность
       ; G - начальное состояние игры для анализа направления
@@ -167,9 +205,9 @@
 
     (dump "power-cloud:" power-cloud)
     (dump "angle-cloud:" (take 5 (drop 5 angle-cloud-table)))
-    (dump "surface:" S)
+    (comment (dump "surface:" S))
     (dump "landings:" target)
-    (dump "rocks:" R)
+    (dump "rocks:" (count rocks) rocks)
       
     (loop [l (read-lander)
            P (lookup-path l target)]
