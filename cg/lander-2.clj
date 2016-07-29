@@ -1,5 +1,7 @@
 (ns Player (:gen-class))
 
+(comment (set! *warn-on-reflection* true))
+
 (defn- dump [& args] (binding [*out* *err*] (apply println args)))
 
 (defrecord Point [^double x ^double y])
@@ -97,7 +99,7 @@
 
 ; Функция оценки качества траектории
 
-(defn- ^double fitness [^Lander l ^Section target]
+(comment (defn- ^double fitness [^Lander l ^Section target rocks]
   (let [x    (:x l)
         y    (:y l)
         adx  (Math/abs (:dx l))
@@ -112,13 +114,40 @@
        (/ (Math/abs phi) 90)
        (/ (if (<= ady 40.0) 0.0 (- ady 40.0)) 40)
        (/ (if (<= adx 20.0) 0.0 (- adx 20.0)) 20)
-       (if (<= fuel 0) 1.0 (/ 1.0 fuel)))))
+       (if (<= fuel 0) 1.0 (/ 1.0 fuel))))))
+
+(defn- rock-fitness [^Lander l R]
+  (let [x  (:x l)
+        r  (first (drop-while
+                    (fn [^Section t] (not (<= (:ax t) x (:bx t)))) R))]
+    (if-not r
+      0.0
+      (let [k  (:k r)
+            dx (- x (:ax r))
+            dy (- (:y l) (:ay r))
+            h  (- dy (* k dx))]
+        (if (> h 100.0)
+          (/ 7000.0 h)
+          1.0e+9)))))
+
+
+(defn- ^double fitness [^Lander l ^Section target rocks]
+  (let [x     (:x l)
+        ax    (:ax target)
+        bx    (:bx target)
+
+        fx    (/ (if (<= ax x bx) 0.0 (Math/abs (- (:mx target) x)))
+                 7000.0)
+
+        fr    (rock-fitness l rocks)]
+    (+ (* 1.0 fr)
+       (* 1.0 fx))))
 
 ; Пересчёт ценностей путей в списке P. Возвращаем отсортированный список
 
-(defn- evaluate-paths [P ^Section target]
+(defn- evaluate-paths [P ^Section target rocks]
   (sort-by :fitness 
-           (map (fn [p] (Fitness. (fitness (first p) target) p)) P)))
+           (map (fn [p] (Fitness. (fitness (first p) target rocks) p)) P)))
 
 ; Слияние отсортированных по fitness последовательностей. Чем fitness меньше,
 ; тем лучше
@@ -172,7 +201,7 @@
 ; (def ^:const ^long runtime-threshold (* 128))
 
 (defn- lookup-path [^long runtime-threshold ^Lander l ^Section target rocks]
-  (loop [P (evaluate-paths (list (list l)) target)
+  (loop [P (evaluate-paths (list (list l)) target rocks)
          its 0]
     (cond (empty? P)
           (do (dump "FAILURE. Making final burn")
@@ -180,21 +209,21 @@
 
           (> its runtime-threshold)
           (do (dump "TIMEOUT. Paths generated:" (count P)
-                    "max depth:" (apply max (map (comp count :path) P)))
+                    "max depth:" (apply max (map (comp count :path) P))
+                    "fitness:" (:fitness (first P)))
+;              (doseq [p P] (dump-lander (:fitness p) (first (:path p))))
               (reverse (:path (first P))))
 
           :else
           (recur (-> (path-cloud (:path (first P)))
                      (cutoff-paths target rocks)
-                     (evaluate-paths target)
+                     (evaluate-paths target rocks)
                      (merge-fitness (rest P)))
                  (inc its)))))
 
 (defn- ^boolean not-aligned [^Lander l ^Lander m]
   (let [c (juxt :x :y :dx :dy)]
     (> (Math/sqrt (reduce + (map (comp (fn [x] (* x x)) -) (c l) (c m)))) 2.0)))
-
-
 
 (defn- read-surface-points []
   (->> (apply list (repeatedly (* 2 (read)) read))
@@ -253,7 +282,7 @@
     (dump "rocks:" (count rocks) rocks)
       
     (loop [l (read-lander)
-           P (lookup-path 200 l target rocks)]
+           P (lookup-path 256 l target rocks)]
       (let [prediction (first P)
             control (second P)
             trouble (cond (nil? control) "END OF PATH"
