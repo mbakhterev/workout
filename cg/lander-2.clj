@@ -97,7 +97,7 @@
 
 ; Функция оценки качества траектории
 
-(defn- ^double fitness [^Lander l ^Section target ^double energy]
+(defn- ^double fitness [^Lander l ^Section target]
   (let [x    (:x l)
         y    (:y l)
         adx  (Math/abs (:dx l))
@@ -117,7 +117,8 @@
 ; Пересчёт ценностей путей в списке P. Возвращаем отсортированный список
 
 (defn- evaluate-paths [P ^Section target]
-  (sort-by :fitness (map (fn [p] (->Fitness (fitness (first p) target 0.0) p)) P)))
+  (sort-by :fitness 
+           (map (fn [p] (Fitness. (fitness (first p) target) p)) P)))
 
 ; Слияние отсортированных по fitness последовательностей. Чем fitness меньше,
 ; тем лучше
@@ -135,19 +136,6 @@
             :else                         (recur P (rest Q) (conj! R q))))))
 
 (def ^:const ^double safe-distance 10.0)
-
-; (defn- safe-rock [^Lander l ^Section r]
-;   (let [x  (:x l)
-;         ax (:ax r)
-;         bx (:bx r)]
-;     (if-not (<= ax x bx)
-;       true
-;       (let [y  (:y l)
-;             dx (- x ax)
-;             dy (- y (:y r))
-;             k  (:k x)]
-;         (> dy (+ 10 (* k dx))))))
-; 
 
 (defn- cutoff-paths [lander-paths ^Section target rocks]
   (letfn [(^boolean off-radar [^Lander l]
@@ -181,22 +169,26 @@
                           (recur P r R))
                         (recur P r R))))))))
 
-(def ^:const ^long runtime-threshold (* 128))
+; (def ^:const ^long runtime-threshold (* 128))
 
-(defn- lookup-path [^Lander l ^Section target rocks]
+(defn- lookup-path [^long runtime-threshold ^Lander l ^Section target rocks]
   (loop [P (evaluate-paths (list (list l)) target)
          its 0]
-    (cond (> its runtime-threshold)
-            (do (dump "TIMEOUT. Paths generated:" (count P)
-                      "max depth:" (apply max (map (comp count :path) P)))
-                (reverse (:path (first P))))
+    (cond (empty? P)
+          (do (dump "FAILURE. Making final burn")
+              (list l (move l 0 4)))
+
+          (> its runtime-threshold)
+          (do (dump "TIMEOUT. Paths generated:" (count P)
+                    "max depth:" (apply max (map (comp count :path) P)))
+              (reverse (:path (first P))))
 
           :else
-            (recur (-> (path-cloud (:path (first P)))
-                       (cutoff-paths target rocks)
-                       (evaluate-paths target)
-                       (merge-fitness (rest P)))
-                   (inc its)))))
+          (recur (-> (path-cloud (:path (first P)))
+                     (cutoff-paths target rocks)
+                     (evaluate-paths target)
+                     (merge-fitness (rest P)))
+                 (inc its)))))
 
 (defn- ^boolean not-aligned [^Lander l ^Lander m]
   (let [c (juxt :x :y :dx :dy)]
@@ -261,7 +253,7 @@
     (dump "rocks:" (count rocks) rocks)
       
     (loop [l (read-lander)
-           P (lookup-path l target rocks)]
+           P (lookup-path 200 l target rocks)]
       (let [prediction (first P)
             control (second P)
             trouble (cond (nil? control) "END OF PATH"
@@ -271,7 +263,7 @@
         (dump-lander "prediction:" prediction)
         
         (if trouble
-          (let [new-path (lookup-path l target rocks)
+          (let [new-path (lookup-path 200 l target rocks)
                 new-control (second new-path)]
             (dump trouble)
             (println (:angle new-control) (:power new-control))
