@@ -1,5 +1,7 @@
 (ns Player (:gen-class))
 
+(defn- dump [& args] (binding [*out* *err*] (apply println args)))
+
 (defrecord Point [^double x ^double y])
 
 ; mx - это середина отрезка по оси x. Может оказаться полезной для fitness.
@@ -18,11 +20,13 @@
 (defrecord Lander [^double x ^double y ^double dx ^double dy
                    ^long fuel ^long angle ^long power])
 
+(defn- dump-lander [^String desc ^Lander l]
+  (dump desc \tab (map (comp (partial format "%.02f") double second) l)))
+
 (defrecord Fitness [^double fitness path])
 
 (defn- read-lander [] (apply ->Lander (repeatedly 7 read)))
 
-(defn- dump [& args] (binding [*out* *err*] (apply println args)))
 
 ; Синусы и косинусы для рассчёта проекции тяги. Угол задаётся от оси (+ PI/2).
 ; Симметричность cos не учитываем, чтобы не усложнять формулу пересчёта угла phi
@@ -130,9 +134,56 @@
             (< (:fitness p) (:fitness q)) (recur (rest P) Q (conj! R p))
             :else                         (recur P (rest Q) (conj! R q))))))
 
+(def ^:const ^double safe-distance 10.0)
+
+; (defn- safe-rock [^Lander l ^Section r]
+;   (let [x  (:x l)
+;         ax (:ax r)
+;         bx (:bx r)]
+;     (if-not (<= ax x bx)
+;       true
+;       (let [y  (:y l)
+;             dx (- x ax)
+;             dy (- y (:y r))
+;             k  (:k x)]
+;         (> dy (+ 10 (* k dx))))))
+; 
+
+(defn- cutoff-paths [lander-paths ^Section target rocks]
+  (letfn [(^boolean off-radar [^Lander l]
+            (not (and (<= 0 (:x l) 6999) (<= 0 (:y l) 2999))))
+
+          (^boolean over-x [^Lander l ^Section r] (<= (:ax r) (:x l) (:bx r)))
+
+          (^boolean over-line [^Lander l ^Section r]
+            (let [dx (- (:x l) (:ax r))
+                  dy (- (:y l) (:ay r))
+                  k  (:k r)]
+              (> dy (+ safe-distance (* k dx)))))
+
+          (^Section find-rock [^Lander l]
+            (first (drop-while (fn [r] (not (over-x l r))) rocks)))]
+
+    (loop [[p & P] lander-paths r nil R (list)]
+      (if (nil? p)
+        R
+        (let [l (first p)]
+          (cond (off-radar l)     (recur P r R)
+                (over-x l target) (recur P r (cons p R))
+
+                (and r
+                     (over-x l r)
+                     (over-line l r)) (recur P r (cons p R))
+
+                :else (if-let [r (find-rock l)]
+                        (if (over-line l r)
+                          (recur P r (cons p R))
+                          (recur P r R))
+                        (recur P r R))))))))
+
 (def ^:const ^long runtime-threshold (* 128))
 
-(defn- lookup-path [^Lander l ^Section target]
+(defn- lookup-path [^Lander l ^Section target rocks]
   (loop [P (evaluate-paths (list (list l)) target)
          its 0]
     (cond (> its runtime-threshold)
@@ -142,15 +193,16 @@
 
           :else
             (recur (-> (path-cloud (:path (first P)))
+                       (cutoff-paths target rocks)
                        (evaluate-paths target)
-                       (merge-fitness (rest P))) (inc its)))))
+                       (merge-fitness (rest P)))
+                   (inc its)))))
 
 (defn- ^boolean not-aligned [^Lander l ^Lander m]
   (let [c (juxt :x :y :dx :dy)]
     (> (Math/sqrt (reduce + (map (comp (fn [x] (* x x)) -) (c l) (c m)))) 2.0)))
 
-(defn- dump-lander [^String desc ^Lander l]
-  (dump desc \tab (map (comp (partial format "%.02f") double second) l)))
+
 
 (defn- read-surface-points []
   (->> (apply list (repeatedly (* 2 (read)) read))
@@ -205,12 +257,11 @@
 
     (dump "power-cloud:" power-cloud)
     (dump "angle-cloud:" (take 5 (drop 5 angle-cloud-table)))
-    (comment (dump "surface:" S))
     (dump "landings:" target)
     (dump "rocks:" (count rocks) rocks)
       
     (loop [l (read-lander)
-           P (lookup-path l target)]
+           P (lookup-path l target rocks)]
       (let [prediction (first P)
             control (second P)
             trouble (cond (nil? control) "END OF PATH"
@@ -220,7 +271,7 @@
         (dump-lander "prediction:" prediction)
         
         (if trouble
-          (let [new-path (lookup-path l target)
+          (let [new-path (lookup-path l target rocks)
                 new-control (second new-path)]
             (dump trouble)
             (println (:angle new-control) (:power new-control))
