@@ -1,22 +1,27 @@
-(ns render (:require '[quil.core]))
+(ns render (:require [quil.core :as q]))
 
 (defn- draw []
-  (stroke (random 255))
-  (stroke-weight (random 10))
-  (fill (random 255))
+  (q/stroke (random 255))
+  (q/stroke-weight (random 20))
+  (q/fill (random 255))
 
-  (let [diam (random 100)
-        x    (random (width))
-        y    (random (height))]
-    (ellipse x y diam diam)))
+  (let [diam (q/random 100)
+        x    (q/random (width))
+        y    (q/random (height))]
+    (q/ellipse x y diam diam)))
 
 (defn- setup []
-  (smooth)
-  (background 255)
-  (frame-rate 1))
+  (q/smooth)
+  (q/background 255)
+  (q/frame-rate 1))
 
-(defsketch lander-debug
+(def ^:private ^:const display-width 1400)
+(def ^:private ^:const display-height 600)
+(def ^:private ^:const space-width 7000)
+(def ^:private ^:const space-height 3000)
+
+(q/defsketch lander-debug
   :host "lander"
-  :size [1400 600]
+  :size [display-width display-height]
   :setup setup
   :draw draw)
