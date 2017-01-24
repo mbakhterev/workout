@@ -1,4 +1,4 @@
-(ns Player (:gen-class))
+(ns lander (:gen-class))
 
 (comment (set! *warn-on-reflection* true))
 
