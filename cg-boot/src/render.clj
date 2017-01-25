@@ -1,24 +1,52 @@
-(ns render (:require [quil.core :as q]))
+(ns render (:require [quil.core :as q]
+                     [lander :as l]))
 
-(defn- draw []
-  (q/stroke (random 255))
-  (q/stroke-weight (random 20))
-  (q/fill (random 255))
+(defn- test-draw []
+  (q/stroke (q/random 255))
+  (q/stroke-weight (q/random 20))
+  (q/fill (q/random 255))
 
   (let [diam (q/random 100)
-        x    (q/random (width))
-        y    (q/random (height))]
+        x    (q/random (q/width))
+        y    (q/random (q/height))]
     (q/ellipse x y diam diam)))
 
-(defn- setup []
+(defn- test-setup []
   (q/smooth)
-  (q/background 255)
+;  (q/background 255)
   (q/frame-rate 1))
 
 (def ^:private ^:const display-width 1400)
 (def ^:private ^:const display-height 600)
 (def ^:private ^:const space-width 7000)
 (def ^:private ^:const space-height 3000)
+
+(def ^:private ^:const factor-x (float (/ display-height space-height)))
+(def ^:private ^:const factor-y (float (/ display-width space-width)))
+(def ^:private ^:const factor-k (/ factor-y factor-x))
+
+(def ^:private scene (atom {}))
+
+(defn- scale-section [^lander.Section s]
+  (l/->Section (* factor-x (:ax s))
+               (* factor-y (:ay s))
+               (* factor-x (:bx s))
+               (* factor-y (:by s))
+               (* factor-k (:k s))
+               (* factor-x (:mx s))))
+
+(defn update-scene [tag value]
+  (case tag
+    :surface (swap! scene assoc :surface (map scale-section value))))
+
+(defn- draw []
+  (let [S (deref scene)]
+    (if-let [surface (:surface S)]
+      (do (q/stroke 0)
+          (q/stroke-weight 4)
+          (doseq [s surface] (q/line (:ax s) (:ay s) (:bx s) (:by s)))))))
+
+(defn- setup [] (q/frame-rate 1))
 
 (q/defsketch lander-debug
   :host "lander"
