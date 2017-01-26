@@ -41,20 +41,9 @@
                (:k s)
                (:mx s)))
 
-(defn- correct-y-section)
-
 (defn update-scene [tag value]
   (case tag
     :surface (swap! scene assoc :surface (map (comp correct-y-section scale-section) value))))
-
-(defn- draw []
-  (let [s (deref scene)]
-    (if-let [surface (:surface s)]
-      (do (q/stroke 0)
-          (q/stroke-weight 1)
-          (doseq [s surface]
-            (q/line (:ax s) (- display-height (:ay s))
-                    (:bx s) (- display-height (:by s))))))))
 
 (defn- draw []
   (q/clear)
@@ -68,7 +57,7 @@
 
 (defn- setup []
 ;  (q/clear)
-;  (q/background 255)
+  (q/background 0)
   (q/frame-rate 1))
 
 (q/defsketch lander-debug

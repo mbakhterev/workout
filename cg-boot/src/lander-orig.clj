@@ -226,7 +226,7 @@
     (> (Math/sqrt (reduce + (map (comp (fn [x] (* x x)) -) (c l) (c m)))) 2.0)))
 
 (defn- read-surface-points []
-  (->> (apply list (repeatedly (* 2 (read)) read))
+  (->> (doall (repeatedly (* 2 (read)) read))
        (partition 2)
        (map (fn [p] (apply ->Point p)))))
 
