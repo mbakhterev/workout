@@ -1,6 +1,5 @@
-(comment [lander :as l])
-
-(ns render (:require [quil.core :as q]))
+(ns render (:require [quil.core :as q]
+                     [records :as r]))
 
 (defn- test-draw []
   (q/stroke (q/random 255))
@@ -14,13 +13,13 @@
 
 (defn- test-setup []
   (q/smooth)
-;  (q/background 255)
   (q/frame-rate 1))
 
-(def ^:private ^:const display-width 700)
-(def ^:private ^:const display-height 300)
 (def ^:private ^:const space-width 7000)
-(def ^:private ^:const space-height 3000)
+(def ^:private ^:const space-height 3000) 
+
+(def ^:private ^:const display-width 1512)
+(def ^:private ^:const display-height (long (* display-width (/ space-height space-width))))
 
 (def ^:private ^:const factor-x (float (/ display-height space-height)))
 (def ^:private ^:const factor-y (float (/ display-width space-width)))
@@ -28,28 +27,49 @@
 
 (def ^:private scene (atom {}))
 
-(defn- scale-section [^lander.Section s]
-  (l/->Section (* factor-x (:ax s))
+(defn- scale-section [^records.Section s]
+  (r/->Section (* factor-x (:ax s))
                (* factor-y (:ay s))
                (* factor-x (:bx s))
                (* factor-y (:by s))
                (* factor-k (:k s))
                (* factor-x (:mx s))))
 
+(defn- correct-y-section [^records.Section s]
+  (r/->Section (:ax s) (- (- display-height 1) (:ay s))
+               (:bx s) (- (- display-height 1) (:by s))
+               (:k s)
+               (:mx s)))
+
+(defn- correct-y-section)
+
 (defn update-scene [tag value]
   (case tag
-    :surface (swap! scene assoc :surface (map scale-section value))))
+    :surface (swap! scene assoc :surface (map (comp correct-y-section scale-section) value))))
 
 (defn- draw []
-  (let [S (deref scene)]
-    (if-let [surface (:surface S)]
+  (let [s (deref scene)]
+    (if-let [surface (:surface s)]
       (do (q/stroke 0)
-          (q/stroke-weight 4)
+          (q/stroke-weight 1)
           (doseq [s surface]
             (q/line (:ax s) (- display-height (:ay s))
                     (:bx s) (- display-height (:by s))))))))
 
-(defn- setup [] (q/frame-rate 1))
+(defn- draw []
+  (q/clear)
+  (let [s (deref scene)]
+    (if-let [surface (:surface s)]
+      (do (q/stroke 255)
+          (q/stroke-weight 1)
+          (doseq [s surface]
+            (q/line (:ax s) (:ay s)
+                    (:bx s) (:by s)))))))
+
+(defn- setup []
+;  (q/clear)
+;  (q/background 255)
+  (q/frame-rate 1))
 
 (q/defsketch lander-debug
   :host "lander"

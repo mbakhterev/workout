@@ -1,4 +1,5 @@
-(ns lander (:require [render :as r]))
+(ns lander (:require [render :as r]
+                     [records :refer :all]))
 
 ; Вспомогательные функции
 (defn- dump [& args] (binding [*out* *err*] (apply println args)))
@@ -13,36 +14,6 @@
                                               4000 200 5000 200 5500 1500 6999 2800]
                                     :lander [500 2700 100 0 800 -90 0]}])
 
-; Структуры данных. Интуитивно могут быть полезны и повысить какую-нибудь
-; эффективность
-
-(defrecord Point [^double x
-                  ^double y])
-
-; Отрезок поверхности. k и mx - это наклон и середина отрезка по оси x.
-
-(defrecord Section [^double ax
-                    ^double ay
-                    ^double bx
-                    ^double by
-                    ^double k
-                    ^double mx])
-
-(defrecord Lander [^double x
-                   ^double y
-                   ^double dx
-                   ^double dy
-                   ^long fuel
-                   ^long angle
-                   ^long power])
-
-(defn- make-section [^Point a ^Point b]
-  (Section. (:x a) (:y a) (:x b) (:y b)
-            (double (/ (- (:y b) (:y a))
-                       (- (:x b) (:x a))))
-            (+ (:x a)
-               (/ (- (:x b) (:x a)) 2.0)))) 
-
-(r/update-scene :surface (list (make-section (->Point 100 200) (->Point 300 400))
-                               (make-section (->Point 400 500) (->Point 600 700))
-                               ))
+(r/update-scene :surface (list (make-section (->Point 0 200) (->Point 300 400))
+                               (make-section (->Point 300 400) (->Point 600 700))
+                               (make-section (->Point 0 0) (->Point 6999 2999))))
