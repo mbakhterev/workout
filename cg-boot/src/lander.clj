@@ -43,4 +43,6 @@
             (+ (:x a)
                (/ (- (:x b) (:x a)) 2.0)))) 
 
-(r/update-scene :surface (list (make-section (->Point 100 200) (->Point 300 400))))
+(r/update-scene :surface (list (make-section (->Point 100 200) (->Point 300 400))
+                               (make-section (->Point 400 500) (->Point 600 700))
+                               ))

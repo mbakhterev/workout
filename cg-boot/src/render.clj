@@ -1,5 +1,6 @@
-(ns render (:require [quil.core :as q]
-                     [lander :as l]))
+(comment [lander :as l])
+
+(ns render (:require [quil.core :as q]))
 
 (defn- test-draw []
   (q/stroke (q/random 255))
@@ -9,15 +10,15 @@
   (let [diam (q/random 100)
         x    (q/random (q/width))
         y    (q/random (q/height))]
-    (q/ellipse x y diam diam)))
+    (q/ellipse x y diam (* 2 diam))))
 
 (defn- test-setup []
   (q/smooth)
 ;  (q/background 255)
   (q/frame-rate 1))
 
-(def ^:private ^:const display-width 1400)
-(def ^:private ^:const display-height 600)
+(def ^:private ^:const display-width 700)
+(def ^:private ^:const display-height 300)
 (def ^:private ^:const space-width 7000)
 (def ^:private ^:const space-height 3000)
 
@@ -44,7 +45,9 @@
     (if-let [surface (:surface S)]
       (do (q/stroke 0)
           (q/stroke-weight 4)
-          (doseq [s surface] (q/line (:ax s) (:ay s) (:bx s) (:by s)))))))
+          (doseq [s surface]
+            (q/line (:ax s) (- display-height (:ay s))
+                    (:bx s) (- display-height (:by s))))))))
 
 (defn- setup [] (q/frame-rate 1))
 
