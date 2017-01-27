@@ -18,7 +18,7 @@
 (def ^:private ^:const space-width 7000)
 (def ^:private ^:const space-height 3000) 
 
-(def ^:private ^:const display-width 1512)
+(def ^:private ^:const display-width 1800)
 (def ^:private ^:const display-height (long (* display-width (/ space-height space-width))))
 
 (def ^:private ^:const factor-x (float (/ display-height space-height)))
@@ -49,7 +49,7 @@
   (q/clear)
   (let [s (deref scene)]
     (if-let [surface (:surface s)]
-      (do (q/stroke 255)
+      (do (q/stroke 127)
           (q/stroke-weight 1)
           (doseq [s surface]
             (q/line (:ax s) (:ay s)

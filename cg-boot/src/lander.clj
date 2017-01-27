@@ -18,10 +18,20 @@
                                (make-section (->Point 300 400) (->Point 600 700))
                                (make-section (->Point 0 0) (->Point 6999 2999))))
 
-(defn- surface-from-points [P]
-  (->> (partition 2 P)
-       (map (fn [p] (apply ->Point p)))
-       (partition 2 1)
-       (map (fn [s] (apply make-section s)))))
+(defn- surface-points [raw-numbers]
+  (map (fn [p] (apply ->Point p)) (partition 2 raw-numbers)))
 
-(r/update-scene :surface (surface-from-points (:surface (test-data 0))))
+(defn- surface-sections [points]
+  (map (fn [s] (apply make-section s)) (partition 2 1 points)))
+
+(r/update-scene :surface (surface-sections (surface-points (:surface (test-data 0)))))
+
+(defn- find-landing-pad [surface]
+  (letfn [^boolean is-pad ([^Point a ^Point b] (< -0.01 (- (:y a) (:y b)) 0.01))]
+    (first (filter is-pad ))
+    )
+  )
+
+(surface-sections (surface-sections (surface-points (:surface (test-data 0)))))
+
+()
