@@ -14,24 +14,22 @@
                                              4000 200 5000 200 5500 1500 6999 2800]
                                    :lander [500 2700 100 0 800 -90 0]}])
 
-(r/update-scene :surface (list (make-section (->Point 0 200) (->Point 300 400))
-                               (make-section (->Point 300 400) (->Point 600 700))
-                               (make-section (->Point 0 0) (->Point 6999 2999))))
-
 (defn- surface-points [raw-numbers]
   (map (fn [p] (apply ->Point p)) (partition 2 raw-numbers)))
 
 (defn- surface-sections [points]
   (map (fn [s] (apply make-section s)) (partition 2 1 points)))
 
-(r/update-scene :surface (surface-sections (surface-points (:surface (test-data 0)))))
+(defn- find-landing-pad [points]
+  (letfn [(^boolean is-pad ([[^Point a ^Point b]] (< -0.01 (- (:y a) (:y b)) 0.01)))]
+    (first (filter is-pad (partition 2 1 points)))))
 
-(defn- find-landing-pad [surface]
-  (letfn [^boolean is-pad ([^Point a ^Point b] (< -0.01 (- (:y a) (:y b)) 0.01))]
-    (first (filter is-pad ))
-    )
-  )
+(find-landing-pad (surface-points (:surface (test-data 0))))
 
-(surface-sections (surface-sections (surface-points (:surface (test-data 0)))))
+(r/update-scene :surface (surface-sections (surface-points (:surface (test-data 0))))) 
 
-()
+(r/update-scene :landing-pad (apply make-section (-> (:surface (test-data 0))
+                                                     (surface-points)
+                                                     (find-landing-pad))))
+
+(r/update-scene :shell (surface-sections (surface-points (:surface (test-data 0)))))

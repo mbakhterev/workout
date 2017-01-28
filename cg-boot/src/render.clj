@@ -43,25 +43,42 @@
 
 (defn update-scene [tag value]
   (case tag
-    :surface (swap! scene assoc :surface (map (comp correct-y-section scale-section) value))))
+    :surface (swap! scene assoc :surface (map (comp correct-y-section scale-section) value))
+    :landing-pad (swap! scene assoc :landing-pad (correct-y-section (scale-section value)))))
 
 (defn- draw []
   (q/clear)
-  (let [s (deref scene)]
-    (if-let [surface (:surface s)]
+  (let [sc (deref scene)]
+    (if-let [surface (:surface sc)]
       (do (q/stroke 127)
           (q/stroke-weight 1)
           (doseq [s surface]
             (q/line (:ax s) (:ay s)
-                    (:bx s) (:by s)))))))
+                    (:bx s) (:by s)))))
+
+    (if-let [landing (:landing-pad sc)]
+      (do (q/stroke 255)
+          (q/stroke-weight 1)
+          (let [delta (/ display-height 128)
+                mark-point (fn [x y] (q/line x (- y delta) x (+ y delta)))]
+            (mark-point (:ax landing) (:ay landing))
+            (mark-point (:bx landing) (:by landing)))))
+    
+    (if-let [shell (:shell sc)]
+      (do (q/stroke 255)
+          (q/stroke-weight 1)
+          )
+      )
+    )) 
 
 (defn- setup []
 ;  (q/clear)
   (q/background 0)
   (q/frame-rate 1))
 
-(q/defsketch lander-debug
-  :host "lander"
-  :size [display-width display-height]
-  :setup setup
-  :draw draw)
+(defn start-sketch []
+  (q/defsketch lander-debug
+    :host "lander"
+    :size [display-width display-height]
+    :setup setup
+    :draw draw))
