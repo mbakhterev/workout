@@ -18,7 +18,7 @@
 (def ^:private ^:const space-width 7000)
 (def ^:private ^:const space-height 3000) 
 
-(def ^:private ^:const display-width 1800)
+(def ^:private ^:const display-width 1500)
 (def ^:private ^:const display-height (long (* display-width (/ space-height space-width))))
 
 (def ^:private ^:const factor-x (float (/ display-height space-height)))
@@ -41,10 +41,15 @@
                (:k s)
                (:mx s)))
 
+(defn- correct-surface [sections]
+  (map (comp correct-y-section scale-section) sections))
+
 (defn update-scene [tag value]
   (case tag
-    :surface (swap! scene assoc :surface (map (comp correct-y-section scale-section) value))
-    :landing-pad (swap! scene assoc :landing-pad (correct-y-section (scale-section value)))))
+    :surface (swap! scene assoc :surface (correct-surface value))
+    :shell (swap! scene assoc :shell (correct-surface value))
+    :landing-pad (swap! scene
+                        assoc :landing-pad (correct-y-section (scale-section value)))))
 
 (defn- draw []
   (q/clear)
@@ -67,12 +72,11 @@
     (if-let [shell (:shell sc)]
       (do (q/stroke 255)
           (q/stroke-weight 1)
-          )
-      )
-    )) 
+          (doseq [s shell]
+            (q/line (:ax s) (:ay s)
+                    (:bx s) (:by s))))))) 
 
 (defn- setup []
-;  (q/clear)
   (q/background 0)
   (q/frame-rate 1))
 

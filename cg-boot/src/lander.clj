@@ -21,15 +21,41 @@
   (map (fn [s] (apply make-section s)) (partition 2 1 points)))
 
 (defn- find-landing-pad [points]
-  (letfn [(^boolean is-pad ([[^Point a ^Point b]] (< -0.01 (- (:y a) (:y b)) 0.01)))]
-    (first (filter is-pad (partition 2 1 points)))))
+  (letfn [(^boolean is-pad ([[^records.Point a ^records.Point b]]
+                            (< -0.01 (- (:y a) (:y b)) 0.01)))]
+    (apply make-section (first (filter is-pad (partition 2 1 points))))))
 
-(find-landing-pad (surface-points (:surface (test-data 0))))
+(defn- surface-shell [points ^records.Section landing]
+  (letfn [(monotonize [points]
+            (loop [[^records.Point p & P] (rest points)
+                   max-y (:y (first points))
+                   R [(first points)]]
+              (cond
+                ; Обработка последней точки. Если она выше чем предыдущий
+                ; максимальный уровень, то включаем её в список. Если нет, то
+                ; накрываем поверхность горизонтальным сегментом на
+                ; максимальном уровне
+                (empty? P) (conj R (if (> (:y p) max-y) p (->Point (:x p) max-y)))
+                
+                ; Обновление максимума с добавлением точки в результат
+                (> (:y p) max-y) (recur P (:y p) (conj R p))
 
-(r/update-scene :surface (surface-sections (surface-points (:surface (test-data 0))))) 
+                ; Пропускаем точку
+                :else (recur P max-y R))))
 
-(r/update-scene :landing-pad (apply make-section (-> (:surface (test-data 0))
-                                                     (surface-points)
-                                                     (find-landing-pad))))
+          (sectionize [points]
+            (map (fn [s] (apply make-section s)) (partition 2 1 points)))]
+    (let [l-points (filter (fn [^records.Point p] (<= (:x p) (:ax landing))) points)
+          r-points (filter (fn [^records.Point p] (>= (:x p) (:bx landing))) points)
+          l-shell (reverse (monotonize (reverse l-points)))
+          r-shell (monotonize r-points)]
+      (vec (concat (sectionize l-shell) (sectionize r-shell))))))
 
-(r/update-scene :shell (surface-sections (surface-points (:surface (test-data 0)))))
+(def ^:private s-points (surface-points (:surface (test-data 0))))
+(def ^:private l-pad (find-landing-pad s-points))
+(def ^:private surface (surface-sections s-points))
+(def ^:private shell (surface-shell s-points l-pad))
+
+(r/update-scene :surface surface)
+(r/update-scene :landing-pad l-pad)
+(r/update-scene :shell shell)
