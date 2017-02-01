@@ -51,7 +51,52 @@
           r-shell (monotonize r-points)]
       (vec (concat (sectionize l-shell) (sectionize r-shell))))))
 
+; Синусы и косинусы для рассчёта проекции тяги. Угол задаётся от оси (+ PI/2).
+; Симметричность cos не учитывается, чтобы не усложнять формулу пересчёта угла phi
+; в индекс таблицы i. Формула должна быть такой i = phi + 90
+
+(def ^:private ^:const ^doubles cos-table
+  (mapv (fn [d] (Math/cos (Math/toRadians (+ d 90)))) (range -90 91)))
+
+(def ^:private ^:const ^doubles sin-table
+  (mapv (fn [d] (Math/sin (Math/toRadians (+ d 90)))) (range -90 91)))
+
+; Функции для доступа в таблицы по значению угла
+
+(defn- x-power [^long phi] (nth cos-table (+ phi 90)))
+(defn- y-power [^long phi] (nth sin-table (+ phi 90)))
+
+; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
+; модуля и то управление, которое привело его в это положение. Положение -
+; вектор в фазовом пространстве (vec x y dx dy fuel). Нужно быстро считать,
+; поэтому juxt не используем.
+
+(def ^:private ^:const ^double M 3.711)
+
+(defn- ^records.Lander move [^records.Lander l [^long angle ^double power]]
+  (let [x    (:x l)
+        y    (:y l)
+        vx   (:vx l)
+        vy   (:vy l)
+        fuel (:fuel l)
+        ax  (* power (x-power angle))
+        ay  (- (* power (y-power angle)) M)]
+    (->Lander (+ x vx (* 0.5 ax)) (+ y vy (* 0.5 ay)) (+ vx ax) (+ vy ay)
+              (- fuel power) angle power)))
+
+(defn- ^boolean is-alive [surface ^records.Lander l]
+  (let [x (:x l)
+        y (:y l)]
+    (and (<= 0 x 6999)
+         (<= 0 y 2999)
+         (not (some (fn [s] (and (< (:ax s) x (:bx s))
+                                 (let [rx (- x (:ax s))
+                                       ry (- y (:ay s))]
+                                   (<= ry (* (:k s) rx)))))
+                    surface)))))
+
 (def ^:private s-points (surface-points (:surface (test-data 0))))
+(def ^:private i-lander (apply ->Lander (:lander (test-data 0)))) 
 (def ^:private l-pad (find-landing-pad s-points))
 (def ^:private surface (surface-sections s-points))
 (def ^:private shell (surface-shell s-points l-pad))
@@ -59,3 +104,5 @@
 (r/update-scene :surface surface)
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell)
+(r/update-scene :lander (take-while (partial is-alive shell)
+                                    (reductions move i-lander (repeat [0 4]))))

@@ -27,7 +27,7 @@
 
 (def ^:private scene (atom {}))
 
-(defn- scale-section [^records.Section s]
+(defn- ^records.Lander scale-section [^records.Section s]
   (r/->Section (* factor-x (:ax s))
                (* factor-y (:ay s))
                (* factor-x (:bx s))
@@ -35,21 +35,32 @@
                (* factor-k (:k s))
                (* factor-x (:mx s))))
 
-(defn- correct-y-section [^records.Section s]
-  (r/->Section (:ax s) (- (- display-height 1) (:ay s))
-               (:bx s) (- (- display-height 1) (:by s))
+(defn- invert-y [^double y] (- display-height y))
+
+(defn- ^records.Lander correct-y-section [^records.Section s]
+  (r/->Section (:ax s) (invert-y (:ay s))
+               (:bx s) (invert-y (:by s))
                (:k s)
                (:mx s)))
 
 (defn- correct-surface [sections]
   (map (comp correct-y-section scale-section) sections))
 
+(defn- ^records.Lander correct-lander [^records.Lander l]
+  (r/->Lander (* factor-x (:x l))
+              (invert-y (* factor-y (:y l)))
+              (* factor-x (:vx l))
+              (- (* factor-y (:vy l)))
+              (:fuel l)
+              (:angle l)
+              (:power l)))
+
 (defn update-scene [tag value]
-  (case tag
-    :surface (swap! scene assoc :surface (correct-surface value))
-    :shell (swap! scene assoc :shell (correct-surface value))
-    :landing-pad (swap! scene
-                        assoc :landing-pad (correct-y-section (scale-section value)))))
+  (swap! scene assoc tag (case tag
+                           :surface (correct-surface value)
+                           :shell (correct-surface value)
+                           :landing-pad (correct-y-section (scale-section value))
+                           :lander (map correct-lander value))))
 
 (defn- draw []
   (q/clear)
@@ -74,7 +85,22 @@
           (q/stroke-weight 1)
           (doseq [s shell]
             (q/line (:ax s) (:ay s)
-                    (:bx s) (:by s))))))) 
+                    (:bx s) (:by s)))))
+    
+    (if-let [trace (:lander sc)]
+      (doseq [lander trace]
+        (let [x (:x lander)
+              y (:y lander)
+              ax (* (:power lander) (Math/sin (:angle lander)))
+              ay (* (:power lander) (Math/cos (:angle lander)))]
+          (q/no-stroke)
+          (q/fill 0 255 0)
+          (q/ellipse (:x lander) (:y lander) 8 8)
+          (q/stroke 255 0 0)
+          (q/stroke-cap :project)
+          (q/line x y (+ x ax) (+ y ay))
+          (q/stroke 0 0 255)
+          (q/line x y (+ x (:vx lander)) (+ y (:vy lander)))))))) 
 
 (defn- setup []
   (q/background 0)

@@ -14,8 +14,8 @@
 
 (defrecord Lander [^double x
                    ^double y
-                   ^double dx
-                   ^double dy
+                   ^double vx
+                   ^double vy
                    ^long fuel
                    ^long angle
                    ^long power])  
