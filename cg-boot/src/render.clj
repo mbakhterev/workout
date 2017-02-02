@@ -63,7 +63,8 @@
                            :lander (map correct-lander value))))
 
 (defn- draw []
-  (q/clear)
+  (q/background (- 255 32))
+  (comment (q/clear))
   (let [sc (deref scene)]
     (if-let [surface (:surface sc)]
       (do (q/stroke 127)
@@ -73,7 +74,7 @@
                     (:bx s) (:by s)))))
 
     (if-let [landing (:landing-pad sc)]
-      (do (q/stroke 255)
+      (do (q/stroke 0)
           (q/stroke-weight 1)
           (let [delta (/ display-height 128)
                 mark-point (fn [x y] (q/line x (- y delta) x (+ y delta)))]
@@ -81,7 +82,7 @@
             (mark-point (:bx landing) (:by landing)))))
     
     (if-let [shell (:shell sc)]
-      (do (q/stroke 255)
+      (do (q/stroke 0)
           (q/stroke-weight 1)
           (doseq [s shell]
             (q/line (:ax s) (:ay s)
@@ -94,21 +95,21 @@
               ax (* (:power lander) (Math/sin (:angle lander)))
               ay (* (:power lander) (Math/cos (:angle lander)))]
           (q/no-stroke)
-          (q/fill 0 255 0)
-          (q/ellipse (:x lander) (:y lander) 8 8)
+          (q/fill 0)
+          (q/ellipse (:x lander) (:y lander) 4 4)
           (q/stroke 255 0 0)
           (q/stroke-cap :project)
-          (q/line x y (+ x ax) (+ y ay))
+          (q/line x y (+ x (* 4 ax)) (+ y (* 4 ay)))
           (q/stroke 0 0 255)
           (q/line x y (+ x (:vx lander)) (+ y (:vy lander)))))))) 
 
 (defn- setup []
-  (q/background 0)
+  (q/smooth)
+  (q/background 0xfd 0xf6 0xe3)
   (q/frame-rate 1))
 
-(defn start-sketch []
-  (q/defsketch lander-debug
-    :host "lander"
-    :size [display-width display-height]
-    :setup setup
-    :draw draw))
+(q/defsketch lander-debug
+  :host "lander"
+  :size [display-width display-height]
+  :setup setup
+  :draw draw)
