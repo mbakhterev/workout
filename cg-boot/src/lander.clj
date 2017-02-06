@@ -73,16 +73,39 @@
 
 (def ^:private ^:const ^double M 3.711)
 
-(defn- ^records.Lander move [^records.Lander l [^long angle ^double power]]
-  (let [x    (:x l)
+(defn- ^records.Lander move [^records.Lander l [^long angle ^long power]]
+  (let [t    0.5
+        x    (:x l)
         y    (:y l)
         vx   (:vx l)
         vy   (:vy l)
         fuel (:fuel l)
         ax   (* power (x-power angle))
         ay   (- (* power (y-power angle)) M)]
-    (->Lander (+ x vx (* 0.5 ax)) (+ y vy (* 0.5 ay)) (+ vx ax) (+ vy ay)
-              (- fuel power) angle power)))
+    (->Lander (+ x (* vx t) (* 0.5 ax t t))
+              (+ y (* vy t) (* 0.5 ay t t))
+              (+ vx (* ax t))
+              (+ vy (* ay t))
+              (- fuel (* power t))
+              angle
+              power)))
+
+(defn- ^records.Lander move-back [^records.Lander l [^long angle ^long power]]
+  (let [t    0.5
+        x    (:x l)
+        y    (:y l)
+        vx   (:vx l)
+        vy   (:vy l)
+        fuel (:fuel l)
+        ax   (* power (x-power angle))
+        ay   (- (* power (y-power angle)) M)]
+    (->Lander (- x (* vx t) (* 0.5 ax t t))
+              (- y (* vy t) (* 0.5 ay t t))
+              (- vx (* ax t))
+              (- vy (* ay t))
+              (+ fuel (* power t))
+              angle
+              power)))
 
 (defn- ^boolean is-alive [surface ^records.Lander l]
   (let [x (:x l)
@@ -105,4 +128,4 @@
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell)
 (r/update-scene :lander (take-while (partial is-alive shell)
-                                    (reductions move i-lander (repeat [0 4]))))
+                                    (reductions move-back i-lander (repeat [0 2]))))

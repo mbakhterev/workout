@@ -60,7 +60,23 @@
                            :surface (correct-surface value)
                            :shell (correct-surface value)
                            :landing-pad (correct-y-section (scale-section value))
-                           :lander (map correct-lander value))))
+                           :lander (map correct-lander value)))
+  true)
+
+(defn- draw-lander [^records.Lander l]
+  (let [x  (:x l)
+        y  (:y l)
+        vx (:vx l)
+        vy (:vy l)
+        ax (* (:power l) (Math/sin (:angle l)))
+        ay (* (:power l) (Math/cos (:angle l)))]
+    (q/no-stroke)
+    (q/fill 0)
+    (q/ellipse (:x l) (:y l) 4 4)
+    (q/stroke 0 0 255)
+    (q/line x y (+ x vx) (+ y vy))
+    (q/stroke 255 0 0)
+    (q/line x y (+ x (* 4 ax)) (+ y (* 4 ay))))) 
 
 (defn- draw []
   (q/background 255)
@@ -89,27 +105,16 @@
                     (:bx s) (:by s)))))
     
     (if-let [trace (:lander sc)]
-      (doseq [lander trace]
-        (let [x (:x lander)
-              y (:y lander)
-              ax (* (:power lander) (Math/sin (:angle lander)))
-              ay (* (:power lander) (Math/cos (:angle lander)))]
-          (q/no-stroke)
-          (q/fill 0)
-          (q/ellipse (:x lander) (:y lander) 4 4)
-          (q/stroke 255 0 0)
-          (q/stroke-cap :project)
-          (q/line x y (+ x (* 4 ax)) (+ y (* 4 ay)))
-          (q/stroke 0 0 255)
-          (q/line x y (+ x (:vx lander)) (+ y (:vy lander)))))))) 
+      (doseq [lander trace] (draw-lander lander))))) 
 
 (defn- setup []
   (q/smooth)
   (q/background 255)
   (q/frame-rate 1))
 
-(q/defsketch lander-debug
-  :host "lander"
-  :size [display-width display-height]
-  :setup setup
-  :draw draw)
+(defn sketch-up []
+  (q/defsketch lander-debug
+    :host "lander"
+    :size [display-width display-height]
+    :setup setup
+    :draw draw))
