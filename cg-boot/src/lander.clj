@@ -79,8 +79,8 @@
         vx   (:vx l)
         vy   (:vy l)
         fuel (:fuel l)
-        ax  (* power (x-power angle))
-        ay  (- (* power (y-power angle)) M)]
+        ax   (* power (x-power angle))
+        ay   (- (* power (y-power angle)) M)]
     (->Lander (+ x vx (* 0.5 ax)) (+ y vy (* 0.5 ay)) (+ vx ax) (+ vy ay)
               (- fuel power) angle power)))
 

@@ -63,7 +63,7 @@
                            :lander (map correct-lander value))))
 
 (defn- draw []
-  (q/background (- 255 32))
+  (q/background 255)
   (comment (q/clear))
   (let [sc (deref scene)]
     (if-let [surface (:surface sc)]
@@ -105,7 +105,7 @@
 
 (defn- setup []
   (q/smooth)
-  (q/background 0xfd 0xf6 0xe3)
+  (q/background 255)
   (q/frame-rate 1))
 
 (q/defsketch lander-debug
