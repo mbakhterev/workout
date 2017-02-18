@@ -18,7 +18,8 @@
                    ^double vy
                    ^long fuel
                    ^long angle
-                   ^long power])  
+                   ^long power
+                   ^boolean alive])
 
 (defn make-section [^Point a ^Point b]
   (Section. (:x a) (:y a)

@@ -74,7 +74,9 @@
 (def ^:private ^:const ^double M 3.711)
 
 (defn- ^records.Lander move [^records.Lander l [^long angle ^long power]]
-  (let [t    0.5
+  (if (not (:alive l))
+    l
+    (let [t    0.5
         x    (:x l)
         y    (:y l)
         vx   (:vx l)
@@ -88,26 +90,30 @@
               (+ vy (* ay t))
               (- fuel (* power t))
               angle
-              power)))
+              power
+              true))))
 
 (defn- ^records.Lander move-back [^records.Lander l [^long angle ^long power]]
-  (let [t    0.5
-        x    (:x l)
-        y    (:y l)
-        vx   (:vx l)
-        vy   (:vy l)
-        fuel (:fuel l)
-        ax   (* power (x-power angle))
-        ay   (- (* power (y-power angle)) M)]
-    (->Lander (- x (* vx t) (* 0.5 ax t t))
-              (- y (* vy t) (* 0.5 ay t t))
-              (- vx (* ax t))
-              (- vy (* ay t))
-              (+ fuel (* power t))
-              angle
-              power)))
+  (if (not (:alive l))
+    l
+    (let [t    0.5
+          x    (:x l)
+          y    (:y l)
+          vx   (:vx l)
+          vy   (:vy l)
+          fuel (:fuel l)
+          ax   (* power (x-power angle))
+          ay   (- (* power (y-power angle)) M)]
+      (->Lander (- x (* vx t) (* 0.5 ax t t))
+                (- y (* vy t) (* 0.5 ay t t))
+                (- vx (* ax t))
+                (- vy (* ay t))
+                (+ fuel (* power t))
+                angle
+                power
+                true))))
 
-(defn- ^boolean is-alive [surface ^records.Lander l]
+(defn- ^boolean alive? [surface ^records.Lander l]
   (let [x (:x l)
         y (:y l)]
     (and (<= 0 x 6999)
@@ -118,8 +124,12 @@
                                    (<= ry (* (:k s) rx)))))
                     surface)))))
 
-(def ^:private s-points (surface-points (:surface (test-data 0))))
-(def ^:private i-lander (apply ->Lander (:lander (test-data 0)))) 
+(defn- ^records.Lander mark-alive [surface ^records.Lander l]
+  (assoc l :alive (alive? surface l)))
+
+(def ^:private ^:const test-id 0)
+(def ^:private s-points (surface-points (:surface (test-data test-id))))
+(def ^:private i-lander (apply ->Lander (conj (:lander (test-data test-id)) true))) 
 (def ^:private l-pad (find-landing-pad s-points))
 (def ^:private surface (surface-sections s-points))
 (def ^:private shell (surface-shell s-points l-pad))
@@ -127,5 +137,11 @@
 (r/update-scene :surface surface)
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell)
-(r/update-scene :lander (take-while (partial is-alive shell)
-                                    (reductions move-back i-lander (repeat [0 2]))))
+
+(r/update-scene :lander
+                (take-while (partial alive? shell)
+                            (reductions move i-lander (repeat [0 2]))))
+
+(comment (map :alive (take 30 (reductions (comp (partial mark-alive shell) move-back) i-lander (repeat [0 2]))))
+         (identity l-pad))
+
