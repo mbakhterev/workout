@@ -1,6 +1,8 @@
 (ns lander (:require [render :as r]
                      [records :refer :all]))
 
+(set! *warn-on-reflection* true)
+
 ; Вспомогательные функции
 (defn- dump [& args] (binding [*out* *err*] (apply println args)))
 (defn- read-surface [] (let [N (read)] (doall (repeatedly (* 2 N) read))))
@@ -21,13 +23,12 @@
   (map (fn [s] (apply make-section s)) (partition 2 1 points)))
 
 (defn- find-landing-pad [points]
-  (letfn [(^boolean is-pad ([[^records.Point a ^records.Point b]]
-                            (< -0.01 (- (:y a) (:y b)) 0.01)))]
+  (letfn [(is-pad ([[a b]] (< -0.01 (- (:y a) (:y b)) 0.01)))]
     (apply make-section (first (filter is-pad (partition 2 1 points))))))
 
-(defn- surface-shell [points ^records.Section landing]
+(defn- surface-shell [points landing]
   (letfn [(monotonize [points]
-            (loop [[^records.Point p & P] (rest points)
+            (loop [[p & P] (rest points)
                    max-y (:y (first points))
                    R [(first points)]]
               (cond
@@ -45,11 +46,12 @@
 
           (sectionize [points]
             (map (fn [s] (apply make-section s)) (partition 2 1 points)))]
-    (let [l-points (filter (fn [^records.Point p] (<= (:x p) (:ax landing))) points)
-          r-points (filter (fn [^records.Point p] (>= (:x p) (:bx landing))) points)
+    (let [l-points (filter (fn [p] (<= (:x p) (:ax landing))) points)
+          r-points (filter (fn [p] (>= (:x p) (:bx landing))) points)
           l-shell (reverse (monotonize (reverse l-points)))
           r-shell (monotonize r-points)]
-      (vec (concat (sectionize l-shell) (sectionize r-shell))))))
+      (comment (vec (concat (sectionize l-shell) (sectionize r-shell))))
+      [(vec (sectionize l-shell)) (vec (sectionize r-shell))])))
 
 ; Синусы и косинусы для рассчёта проекции тяги. Угол задаётся от оси (+ PI/2).
 ; Симметричность cos не учитывается, чтобы не усложнять формулу пересчёта угла phi
@@ -73,7 +75,7 @@
 
 (def ^:private ^:const ^double M 3.711)
 
-(defn- ^records.Lander move [^records.Lander l [^long angle ^long power]]
+(defn- move [l [angle power]]
   (if (not (:alive l))
     l
     (let [t    0.5
@@ -93,7 +95,7 @@
               power
               true))))
 
-(defn- ^records.Lander move-back [^records.Lander l [^long angle ^long power]]
+(defn- move-back [l [angle power]]
   (if (not (:alive l))
     l
     (let [t    0.5
@@ -113,26 +115,49 @@
                 power
                 true))))
 
+(def ^:private ^:const ^double x-max (- 7000.0 1.0))
+(def ^:private ^:const ^double y-max (- 3000.0 1.0))
+
 (defn- ^boolean alive? [surface ^records.Lander l]
   (let [x (:x l)
         y (:y l)]
-    (and (<= 0 x 6999)
-         (<= 0 y 2999)
+    (and (<= 0 x x-max)
+         (<= 0 y y-max)
          (not (some (fn [s] (and (< (:ax s) x (:bx s))
                                  (let [rx (- x (:ax s))
                                        ry (- y (:ay s))]
                                    (<= ry (* (:k s) rx)))))
                     surface)))))
 
-(defn- ^records.Lander mark-alive [surface ^records.Lander l]
-  (assoc l :alive (alive? surface l)))
+(defn- mark-alive [surface l] (assoc l :alive (alive? surface l)))
+
+(defn- to-cell-x [x] (+ rG (Math/floor (/ x dG))))
+
+(defn- build-row [l-side r-side height]
+  (let [between (fn [a b h] (and (<= a h) (< h b)))
+        xbyy (fn [y s] (+ (:ax s) (/ (- y (:ay s)) (:k s))))
+        cell-bottom (- height rG)
+        l (first (filter (fn [s] (between (:by s) (:ay s) cell-bottom)) l-side))
+        r (first (filter (fn [s] (between (:ay s) (:by s) cell-bottom)) r-side))
+        lx (if l (to-cell-x (+ (xbyy cell-bottom l) dG)))
+        rx (if r (to-cell-x (- (xbyy cell-bottom r) dG)))]
+    [(->Point lx height)
+     (->Point rx height)]))
+
+(defn- build-grid [l-shell r-shell l-pad]
+  (let [l (move-back (->Lander (:mx l-pad) (:ay l-pad) 0.0 -40.0 10 0 4 true) [0 4])
+        h (:y l)]
+    [(build-row l-shell r-shell h)]))
 
 (def ^:private ^:const test-id 0)
 (def ^:private s-points (surface-points (:surface (test-data test-id))))
 (def ^:private i-lander (apply ->Lander (conj (:lander (test-data test-id)) true))) 
 (def ^:private l-pad (find-landing-pad s-points))
 (def ^:private surface (surface-sections s-points))
-(def ^:private shell (surface-shell s-points l-pad))
+(let [[l r] (surface-shell s-points l-pad)]
+  (def ^:private shell (vec (concat l r)))
+  (def ^:private l-shell l)
+  (def ^:private r-shell r))
 
 (r/update-scene :surface surface)
 (r/update-scene :landing-pad l-pad)
@@ -142,6 +167,4 @@
                 (take-while (partial alive? shell)
                             (reductions move i-lander (repeat [0 2]))))
 
-(comment (map :alive (take 30 (reductions (comp (partial mark-alive shell) move-back) i-lander (repeat [0 2]))))
-         (identity l-pad))
-
+(r/update-scene :grid (build-grid l-shell r-shell l-pad))

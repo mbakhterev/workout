@@ -1,6 +1,8 @@
 (ns render (:require [quil.core :as q]
                      [records :as r]))
 
+(set! *warn-on-reflection* true)
+
 (defn- test-draw []
   (q/stroke (q/random 255))
   (q/stroke-weight (q/random 20))
@@ -46,7 +48,7 @@
 (defn- correct-surface [sections]
   (map (comp correct-y-section scale-section) sections))
 
-(defn- ^records.Lander correct-lander [^records.Lander l]
+(defn- correct-lander [l]
   (r/->Lander (* factor-x (:x l))
               (invert-y (* factor-y (:y l)))
               (* factor-x (:vx l))
@@ -56,15 +58,18 @@
               (:power l)
               (:alive l)))
 
+(defn- correct-cell [c] (r/->Point (* factor-x (:x c)) (invert-y (* factor-y (:y c)))))
+
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag
                            :surface (correct-surface value)
                            :shell (correct-surface value)
                            :landing-pad (correct-y-section (scale-section value))
-                           :lander (map correct-lander value)))
+                           :lander (map correct-lander value)
+                           :grid (map (fn [r] (map correct-cell r)) value)))
   true)
 
-(defn- draw-lander [^records.Lander l]
+(defn- draw-lander [l]
   (let [x  (:x l)
         y  (:y l)
         vx (:vx l)
@@ -78,6 +83,12 @@
     (q/line x y (+ x vx) (+ y vy))
     (q/stroke 255 0 0)
     (q/line x y (+ x (* 4 ax)) (+ y (* 4 ay))))) 
+
+(defn- draw-cell [c]
+  (let [mx (:x c)
+        my (:y c)]
+    (q/fill 64)
+    (q/ellipse mx my 4 4)))
 
 (defn- draw []
   (q/background 255)
@@ -106,7 +117,10 @@
                     (:bx s) (:by s)))))
     
     (if-let [trace (:lander sc)]
-      (doseq [lander trace] (draw-lander lander))))) 
+      (doseq [lander trace] (draw-lander lander)))
+    
+    (if-let [grid (:grid sc)]
+      (doseq [row grid cell row] (draw-cell cell))))) 
 
 (defn- setup []
   (q/smooth)
