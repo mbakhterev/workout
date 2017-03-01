@@ -87,6 +87,7 @@
 (defn- draw-cell [c]
   (let [mx (:x c)
         my (:y c)]
+    (q/stroke 0)
     (q/fill 64)
     (q/ellipse mx my 4 4)))
 

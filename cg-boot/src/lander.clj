@@ -78,14 +78,14 @@
 (defn- move [l [angle power]]
   (if (not (:alive l))
     l
-    (let [t    0.5
-        x    (:x l)
-        y    (:y l)
-        vx   (:vx l)
-        vy   (:vy l)
-        fuel (:fuel l)
-        ax   (* power (x-power angle))
-        ay   (- (* power (y-power angle)) M)]
+    (let [t    1.0
+          x    (:x l)
+          y    (:y l)
+          vx   (:vx l)
+          vy   (:vy l)
+          fuel (:fuel l)
+          ax   (* power (x-power angle))
+          ay   (- (* power (y-power angle)) M)]
     (->Lander (+ x (* vx t) (* 0.5 ax t t))
               (+ y (* vy t) (* 0.5 ay t t))
               (+ vx (* ax t))
@@ -98,7 +98,7 @@
 (defn- move-back [l [angle power]]
   (if (not (:alive l))
     l
-    (let [t    0.5
+    (let [t    1.0
           x    (:x l)
           y    (:y l)
           vx   (:vx l)
@@ -131,7 +131,7 @@
 
 (defn- mark-alive [surface l] (assoc l :alive (alive? surface l)))
 
-(defn- to-cell-x [x] (+ rG (Math/floor (/ x dG))))
+(defn- to-cell-x [x] (+ rG (* dG (Math/floor (/ x dG)))))
 
 (defn- build-row [l-side r-side height]
   (let [between (fn [a b h] (and (<= a h) (< h b)))
@@ -139,15 +139,15 @@
         cell-bottom (- height rG)
         l (first (filter (fn [s] (between (:by s) (:ay s) cell-bottom)) l-side))
         r (first (filter (fn [s] (between (:ay s) (:by s) cell-bottom)) r-side))
-        lx (if l (to-cell-x (+ (xbyy cell-bottom l) dG)))
-        rx (if r (to-cell-x (- (xbyy cell-bottom r) dG)))]
+        lx (to-cell-x (+ (if l (xbyy cell-bottom l) 0.0) dG))
+        rx (to-cell-x (- (if r (xbyy cell-bottom r) x-max) dG))]
     [(->Point lx height)
-     (->Point rx height)]))
+     (->Point rx height)])) 
 
 (defn- build-grid [l-shell r-shell l-pad]
   (let [l (move-back (->Lander (:mx l-pad) (:ay l-pad) 0.0 -40.0 10 0 4 true) [0 4])
         h (:y l)]
-    [(build-row l-shell r-shell h)]))
+    [(conj (build-row l-shell r-shell h) (->Point (:x l) h))]))
 
 (def ^:private ^:const test-id 0)
 (def ^:private s-points (surface-points (:surface (test-data test-id))))
