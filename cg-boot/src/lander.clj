@@ -147,7 +147,7 @@
 (defn- build-grid [l-shell r-shell l-pad]
   (let [l (move-back (->Lander (:mx l-pad) (:ay l-pad) 0.0 -40.0 10 0 4 true) [0 4])
         h (:y l)]
-    [(conj (build-row l-shell r-shell h) (->Point (:x l) h))]))
+    (mapv (partial build-row l-shell r-shell) (range (:y l) y-max dG))))
 
 (def ^:private ^:const test-id 0)
 (def ^:private s-points (surface-points (:surface (test-data test-id))))

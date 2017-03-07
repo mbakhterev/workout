@@ -33,3 +33,10 @@
 ; dG. Почему dG = 20? Чтобы половина ребра, rG = 10. Почему rG = 10? От балды
 (def ^:const dG 20.0)
 (def ^:const rG (/ dG 2.0)) 
+
+(defrecord Grid [^double baseline rows])
+(defrecord Row [^double left cells])
+(defrecord Cell [vx vy])
+
+(defn make-cell [vx-range vy-range] (Cell. (long-array (/ vx-range 32)) 
+                                           (long-array (/ vy-range 32))))
