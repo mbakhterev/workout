@@ -84,8 +84,10 @@
     (q/stroke 255 0 0)
     (q/line x y (+ x (* 4 ax)) (+ y (* 4 ay))))) 
 
-(def ^:private ^:const x-cell-rG (* (- r/rG 3) factor-x))
-(def ^:private ^:const y-cell-rG (* (- r/rG 3) factor-y))
+(def ^:private ^:const rG 10.0)
+
+(def ^:private ^:const x-cell-rG (* (- rG 3) factor-x))
+(def ^:private ^:const y-cell-rG (* (- rG 3) factor-y))
 
 (defn- draw-cell [c]
   (let [mx (:x c)

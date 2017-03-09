@@ -131,23 +131,28 @@
 
 (defn- mark-alive [surface l] (assoc l :alive (alive? surface l)))
 
-(defn- to-cell-x [x] (+ rG (* dG (Math/floor (/ x dG)))))
+(defn- to-grid [dG x] (* dG (Math/floor (/ x dG))))
 
-(defn- build-row [l-side r-side height]
+(defn- build-row [dG nV l-side r-side height]
   (let [between (fn [a b h] (and (<= a h) (< h b)))
         xbyy (fn [y s] (+ (:ax s) (/ (- y (:ay s)) (:k s))))
-        cell-bottom (- height rG)
-        l (first (filter (fn [s] (between (:by s) (:ay s) cell-bottom)) l-side))
-        r (first (filter (fn [s] (between (:ay s) (:by s) cell-bottom)) r-side))
-        lx (to-cell-x (+ (if l (xbyy cell-bottom l) 0.0) dG))
-        rx (to-cell-x (- (if r (xbyy cell-bottom r) x-max) dG))]
-    [(->Point lx height)
-     (->Point rx height)])) 
+        l (first (filter (fn [s] (between (:by s) (:ay s) height)) l-side))
+        r (first (filter (fn [s] (between (:ay s) (:by s) height)) r-side))
+        lx (to-grid dG (+ (if l (xbyy height l) 0.0)))
+        rx (if r (xbyy height r) x-max)
+        n-cells (+ 1 (long (/ (- rx lx) dG))) ]
+    (->Row lx (vec (repeatedly n-cells (fn [] (->Cell (boolean-array nV)
+                                                      (boolean-array nV)))))))) 
 
-(defn- build-grid [l-shell r-shell l-pad]
+(defn- build-grid [dG dV nV l-shell r-shell l-pad]
   (let [l (move-back (->Lander (:mx l-pad) (:ay l-pad) 0.0 -40.0 10 0 4 true) [0 4])
-        h (:y l)]
-    (mapv (partial build-row l-shell r-shell) (range (:y l) y-max dG))))
+        h (- (:y l) (* 0.25 dG))
+        nv (+ 1 (* 2 nV))]
+    (->Grid dG
+            dV
+            nv
+            h
+            (mapv (partial build-row dG nv l-shell r-shell) (range h y-max dG)))))
 
 (def ^:private ^:const test-id 0)
 (def ^:private s-points (surface-points (:surface (test-data test-id))))
@@ -167,4 +172,8 @@
                 (take-while (partial alive? shell)
                             (reductions move i-lander (repeat [0 2]))))
 
-(r/update-scene :grid (build-grid l-shell r-shell l-pad))
+(r/update-scene :grid (build-grid dG l-shell r-shell l-pad))
+
+(map (comp count :cells) (build-grid dG l-shell r-shell l-pad))
+(time (reduce + (map (comp count :cells) (:rows (build-grid dG 20.0 20 l-shell r-shell l-pad)))))
+
