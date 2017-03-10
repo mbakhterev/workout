@@ -73,7 +73,7 @@
 ; вектор в фазовом пространстве (vec x y dx dy fuel). Нужно быстро считать,
 ; поэтому juxt не используем.
 
-(def ^:private ^:const ^double M 3.711)
+(def ^:private ^:const M 3.711)
 
 (defn- move [l [angle power]]
   (if (not (:alive l))
@@ -142,10 +142,7 @@
         lx (grid-ceil dG (+ (if l (xbyy height l) 0.0) (* 2 dG)))
         rx (grid-floor dG (- (if r (xbyy height r) x-max) (* 2 dG)))
         n-cells (+ 1 (long (/ (- rx lx) dG))) ]
-    (->Row lx (vec (repeatedly n-cells (fn [] (->Cell (boolean-array nV)
-                                                      (boolean-array nV)
-                                                      (boolean-array nV)
-                                                      (boolean-array nV)))))))) 
+    (->Row lx (vec (repeatedly n-cells (fn [] (boolean-array (4 * nV nV)))))))) 
 
 (defn- build-grid [dG dV nV l-rock r-rock l-pad lander]
   ;         dG, dV: размеры ячеек по пространству и по скоростям
@@ -160,39 +157,78 @@
     (->Grid dG dV nV h (mapv (partial build-row dG nV l-rock r-rock) (range h top dG)))))
 
 (def ^:private ^:const dG 20.0)
-(def ^:private ^:const dV 5.0)
+(def ^:private ^:const dV 2.0)
 (def ^:private ^:const nV 50) 
+(def ^:private ^:const fV 38.0)
 
 (defn- arrived? [dG dV T l]
   (and (<= (Math/abs (- (:x T) (:x l))) dG)
        (<= (Math/abs (- (:y T) (:y l))) dG)
-       (<= (Math/abs (- (:x T) (:x l))) dG)
-       )
-  )
+       (<= (Math/abs (- (:vx T) (:vx l))) dV)
+       (<= (Math/abs (- (:vy T) (:vy l))) dV)))
+
+(defn- visit-speed [nV dV array l]
+  (let [lvx (:vx l)
+        lvy (:vy l)
+        offset (* nV nV (+ (if (>= lvx) 2 0) (if (>= lvy) 1 0)))
+        nx (Math/ceil (/ (Math/abs lvx) dV))
+        ny (Math/ceil (/ (Math/abs lvy) dV))
+        idx (+ offset (* ny nV) nx)]
+    (if (and (< nx nV)
+             (< ny nV)
+             (not (aget array idx)))
+      (do (aset array idx true)
+          l))))
+
+(defn- visit-grid [G l]
+  (let [bl (:baseling G)
+        R (:rows G)
+        h (:y l)]
+    (println "bl R h" bl R h)
+    (if (>= h bl)
+      (let [nr (Math/ceil (/ (- h bl) (:dG G)))]
+        (if (< nr (count R))
+          (let [x (:x l)
+                r (nth R nr)
+                lx (:left r)]
+            (if (>= x lx)
+              (let [nc (Math/ceil (/ (- x lx) (:dG G)))]
+                (if (< nc (count r))
+                  (list (:nV G) (:dV G) (nth r nc) l))))))))))
+
+(defn- landers-up [dG fV l-pad]
+  (map (fn [x] (move-back (->Lander x (:ay l-pad) 0.0 (- fV) 0 0 0 true) [0 4]))
+       (range (+ (:ax l-pad) dG) (:bx l-pad) dG)))
 
 (def ^:private ^:const test-id 0)
-(def ^:private s-points (surface-points (:surface (test-data test-id))))
-(def ^:private i-lander (apply ->Lander (conj (:lander (test-data test-id)) true))) 
-(def ^:private l-pad (find-landing-pad s-points))
-(def ^:private surface (surface-sections s-points))
+(def ^:private ^:const s-points (surface-points (:surface (test-data test-id))))
+(def ^:private ^:const i-lander (apply ->Lander (conj (:lander (test-data test-id)) true))) 
+(def ^:private ^:const l-pad (find-landing-pad s-points))
+(def ^:private ^:const surface (surface-sections s-points))
 (let [[l r] (surface-shell s-points l-pad)]
-  (def ^:private shell (vec (concat l r)))
-  (def ^:private l-shell l)
-  (def ^:private r-shell r))
+  (def ^:private ^:const shell (vec (concat l r)))
+  (def ^:private ^:const l-shell l)
+  (def ^:private ^:const r-shell r))
+
+(def ^:private grid (build-grid dG dV nV l-shell r-shell l-pad i-lander))
 
 (r/update-scene :surface surface)
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell)
 
 (r/update-scene :lander
-                (take-while (partial alive? shell)
-                            (reductions move i-lander (repeat [0 2]))))
+                (concat (take-while (partial alive? shell)
+                                    (reductions move i-lander (repeat [0 2])))
+                        (identity (keep visit-grid (landers-up dG fV l-pad)))))
 
+(r/update-scene :grid grid)
 
-
-(r/update-scene :grid (build-grid dG dV nV l-shell r-shell l-pad i-lander))
-
-(time (reduce + (map (comp count :cells)
-                     (:rows (build-grid dG dV nV l-shell r-shell l-pad i-lander)))))
+(time (reduce + (map (comp count :cells) (:rows grid))))
 
 (move-back (->Lander 0.0 0.0 0.0 -40.0 0 0 4 true) [0 4])
+
+(count (:rows grid))
+
+(keep (partial visit-grid grid) (landers-up dG fV l-pad))
+
+(visit-grid grid (first (landers-up dG fV l-pad)))
