@@ -131,28 +131,44 @@
 
 (defn- mark-alive [surface l] (assoc l :alive (alive? surface l)))
 
-(defn- to-grid [dG x] (* dG (Math/floor (/ x dG))))
+(defn- grid-ceil [dG x] (* dG (Math/ceil (/ x dG))))
+(defn- grid-floor [dG x] (* dG (Math/floor (/ x dG))))
 
 (defn- build-row [dG nV l-side r-side height]
   (let [between (fn [a b h] (and (<= a h) (< h b)))
         xbyy (fn [y s] (+ (:ax s) (/ (- y (:ay s)) (:k s))))
         l (first (filter (fn [s] (between (:by s) (:ay s) height)) l-side))
         r (first (filter (fn [s] (between (:ay s) (:by s) height)) r-side))
-        lx (to-grid dG (+ (if l (xbyy height l) 0.0)))
-        rx (if r (xbyy height r) x-max)
+        lx (grid-ceil dG (+ (if l (xbyy height l) 0.0) (* 2 dG)))
+        rx (grid-floor dG (- (if r (xbyy height r) x-max) (* 2 dG)))
         n-cells (+ 1 (long (/ (- rx lx) dG))) ]
     (->Row lx (vec (repeatedly n-cells (fn [] (->Cell (boolean-array nV)
+                                                      (boolean-array nV)
+                                                      (boolean-array nV)
                                                       (boolean-array nV)))))))) 
 
-(defn- build-grid [dG dV nV l-shell r-shell l-pad]
-  (let [l (move-back (->Lander (:mx l-pad) (:ay l-pad) 0.0 -40.0 10 0 4 true) [0 4])
+(defn- build-grid [dG dV nV l-rock r-rock l-pad lander]
+  ;         dG, dV: размеры ячеек по пространству и по скоростям
+  ;             nV: количество шагов по скорости в каждом направлении: up, down,
+  ;                 left, right
+  ; l-rock, r-rock: левая и правая стороны скалы
+  ;          l-pad: посадочная площадка
+  ;         lander: начальная позиция модуля  
+  (let [l (move-back (->Lander (:mx l-pad) (:ay l-pad) 0.0 -35.0 0 0 4 true) [0 4])
         h (- (:y l) (* 0.25 dG))
-        nv (+ 1 (* 2 nV))]
-    (->Grid dG
-            dV
-            nv
-            h
-            (mapv (partial build-row dG nv l-shell r-shell) (range h y-max dG)))))
+        top (min (+ (:y lander) (* 4 dG)) y-max)]
+    (->Grid dG dV nV h (mapv (partial build-row dG nV l-rock r-rock) (range h top dG)))))
+
+(def ^:private ^:const dG 20.0)
+(def ^:private ^:const dV 5.0)
+(def ^:private ^:const nV 50) 
+
+(defn- arrived? [dG dV T l]
+  (and (<= (Math/abs (- (:x T) (:x l))) dG)
+       (<= (Math/abs (- (:y T) (:y l))) dG)
+       (<= (Math/abs (- (:x T) (:x l))) dG)
+       )
+  )
 
 (def ^:private ^:const test-id 0)
 (def ^:private s-points (surface-points (:surface (test-data test-id))))
@@ -172,8 +188,11 @@
                 (take-while (partial alive? shell)
                             (reductions move i-lander (repeat [0 2]))))
 
-(r/update-scene :grid (build-grid dG l-shell r-shell l-pad))
 
-(map (comp count :cells) (build-grid dG l-shell r-shell l-pad))
-(time (reduce + (map (comp count :cells) (:rows (build-grid dG 20.0 20 l-shell r-shell l-pad)))))
 
+(r/update-scene :grid (build-grid dG dV nV l-shell r-shell l-pad i-lander))
+
+(time (reduce + (map (comp count :cells)
+                     (:rows (build-grid dG dV nV l-shell r-shell l-pad i-lander)))))
+
+(move-back (->Lander 0.0 0.0 0.0 -40.0 0 0 4 true) [0 4])

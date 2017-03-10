@@ -38,4 +38,4 @@
 (defrecord Row [^double left
                         cells])
 
-(defrecord Cell [vx vy])
+(defrecord Cell [vx+ vx- vy+ vy-])
