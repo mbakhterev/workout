@@ -73,9 +73,9 @@
 ; вектор в фазовом пространстве (vec x y dx dy fuel). Нужно быстро считать,
 ; поэтому juxt не используем.
 
-(def ^:private ^:const M 3.711)
+(def ^:private ^:const M 3.711)  
 
-(defn- move [l [angle power]]
+(defn- move [l angle power]
   (if (not (:alive l))
     l
     (let [t    1.0
@@ -95,7 +95,7 @@
               power
               true))))
 
-(defn- move-back [l [angle power]]
+(defn- move-back [l angle power]
   (if (not (:alive l))
     l
     (let [t    1.0
@@ -115,6 +115,8 @@
                 power
                 true))))
 
+(defn- wrap [f] (fn [l [a p]] (f l a p)))
+
 (def ^:private ^:const ^double x-max (- 7000.0 1.0))
 (def ^:private ^:const ^double y-max (- 3000.0 1.0))
 
@@ -130,6 +132,11 @@
                     surface)))))
 
 (defn- mark-alive [surface l] (assoc l :alive (alive? surface l)))
+
+(def ^:private ^:const dG 20.0)
+(def ^:private ^:const dV 2.0)
+(def ^:private ^:const nV 50) 
+(def ^:private ^:const fV 38.0)  
 
 (defn- grid-ceil [dG x] (* dG (Math/ceil (/ x dG))))
 (defn- grid-floor [dG x] (* dG (Math/floor (/ x dG))))
@@ -151,15 +158,12 @@
   ; l-rock, r-rock: левая и правая стороны скалы
   ;          l-pad: посадочная площадка
   ;         lander: начальная позиция модуля  
-  (let [l (move-back (->Lander (:mx l-pad) (:ay l-pad) 0.0 -35.0 0 0 4 true) [0 4])
+  (let [l (move-back (->Lander (:mx l-pad) (:ay l-pad) 0.0 -35.0 0 0 4 true) 0 4)
         h (- (:y l) (* 0.25 dG))
         top (min (+ (:y lander) (* 4 dG)) y-max)]
     (->Grid dG dV nV h (mapv (partial build-row dG nV l-rock r-rock) (range h top dG)))))
 
-(def ^:private ^:const dG 20.0)
-(def ^:private ^:const dV 2.0)
-(def ^:private ^:const nV 50) 
-(def ^:private ^:const fV 38.0)
+
 
 (defn- arrived? [dG dV T l]
   (and (<= (Math/abs ^double (- (:x T) (:x l))) dG)
@@ -199,8 +203,55 @@
                   (visit-speed (:nV G) (:dV G) (nth C nc) l))))))))))
 
 (defn- landers-up [dG fV l-pad]
-  (map (fn [x] (move-back (->Lander x (:ay l-pad) 0.0 (- fV) 0 0 0 true) [0 4]))
+  (map (fn [x] (move-back (->Lander x (:ay l-pad) 0.0 (- fV) 0 0 0 true) 0 4))
        (range (+ (:ax l-pad) dG) (:bx l-pad) dG)))
+
+(defn- estimate [T l]
+  (let [dx (- (:x T) (:x l))
+        dy (- (:y T) (:y l))
+        dvx (- (:vx T) (:vx l))
+        dvy (- (:vy T) (:vy l))]
+    (+ (:fuel l) 
+       (+ (* dvx dvx) (* dvy dvy)) 
+       (Math/sqrt (+ (* dx dx) (* dy dy))))))
+
+(defn- path-estimate [T p] (estimate T (first p)))
+
+(defn- gen-cloud [base cloud array-convert]
+  (let [A (first base)
+        B (last base)]
+    (->> base
+         (mapv (fn [p] (->> cloud
+                            (map (partial + p))
+                            (filter (fn [i] (<= A i B)))
+                            array-convert
+                            vec))))))
+
+(def ^:private ^:const dA 5)
+(def ^:private ^:const angle-cloud-table (gen-cloud (range -90 91)
+                                                    (range -15 (+ 15 dA) dA)
+                                                    long-array))
+
+(defn- angle-cloud [phi] (nth angle-cloud-table (+ 90 phi)))
+
+(def ^:private ^:const power-cloud (gen-cloud (range 0 5)
+                                              (range -1.0 2.0)
+                                              double-array))
+
+(defn- path-cloud [path]
+  (let [l (first path)]
+    (for [p (power-cloud (:power l)) a (angle-cloud (:angle l))] 
+      (cons (move-back l a p) path))))
+
+(defn- search [grid target paths]
+  (let [cmp (fn [x y] (compare (path-estimate target x)
+                               (path-estimate target y)))
+        visit (fn [p] (visit-grid grid (first p)))]
+    (loop [queue (apply sorted-set-cmp paths)]
+      (if-let [p (first queue)]
+        (if (arrived? (:dG grid) (:dV grid) target (first p))
+          p
+          (recur (into queue (doall (keep visit (path-cloud p))))))))))
 
 (def ^:private ^:const test-id 0)
 (def ^:private ^:const s-points (surface-points (:surface (test-data test-id))))
@@ -213,7 +264,6 @@
   (def ^:private ^:const r-shell r))
 
 (def ^:private grid (build-grid dG dV nV l-shell r-shell l-pad i-lander))
-(keep (partial visit-grid grid) (landers-up dG fV l-pad)) 
 
 (r/update-scene :surface surface)
 (r/update-scene :landing-pad l-pad)
@@ -221,13 +271,9 @@
 
 (r/update-scene :lander
                 (concat (take-while (partial alive? shell)
-                                    (reductions move i-lander (repeat [0 2])))
-                        (landers-up dG fV l-pad)))
+                                    (reductions (wrap move) i-lander (repeat [0 2])))
+                        (keep (partial visit-grid grid) (landers-up dG fV l-pad))))
 
 (r/update-scene :grid grid)
 
 (time (reduce + (map (comp count :cells) (:rows grid))))
-
-(move-back (->Lander 0.0 0.0 0.0 -40.0 0 0 4 true) [0 4])
-
-
