@@ -142,7 +142,7 @@
         lx (grid-ceil dG (+ (if l (xbyy height l) 0.0) (* 2 dG)))
         rx (grid-floor dG (- (if r (xbyy height r) x-max) (* 2 dG)))
         n-cells (+ 1 (long (/ (- rx lx) dG))) ]
-    (->Row lx (vec (repeatedly n-cells (fn [] (boolean-array (4 * nV nV)))))))) 
+    (->Row lx (vec (repeatedly n-cells (fn [] (boolean-array (* 4 nV nV)))))))) 
 
 (defn- build-grid [dG dV nV l-rock r-rock l-pad lander]
   ;         dG, dV: размеры ячеек по пространству и по скоростям
@@ -162,17 +162,18 @@
 (def ^:private ^:const fV 38.0)
 
 (defn- arrived? [dG dV T l]
-  (and (<= (Math/abs (- (:x T) (:x l))) dG)
-       (<= (Math/abs (- (:y T) (:y l))) dG)
-       (<= (Math/abs (- (:vx T) (:vx l))) dV)
-       (<= (Math/abs (- (:vy T) (:vy l))) dV)))
+  (and (<= (Math/abs ^double (- (:x T) (:x l))) dG)
+       (<= (Math/abs ^double (- (:y T) (:y l))) dG)
+       (<= (Math/abs ^double (- (:vx T) (:vx l))) dV)
+       (<= (Math/abs ^double (- (:vy T) (:vy l))) dV)))
 
-(defn- visit-speed [nV dV array l]
+(defn- visit-speed [nV dV ^booleans array l]
   (let [lvx (:vx l)
         lvy (:vy l)
-        offset (* nV nV (+ (if (>= lvx) 2 0) (if (>= lvy) 1 0)))
-        nx (Math/ceil (/ (Math/abs lvx) dV))
-        ny (Math/ceil (/ (Math/abs lvy) dV))
+        offset (* nV nV (+ (if (neg? lvx) 2 0)
+                           (if (neg? lvy) 1 0)))
+        nx (Math/ceil (/ (Math/abs ^double lvx) dV))
+        ny (Math/ceil (/ (Math/abs ^double lvy) dV))
         idx (+ offset (* ny nV) nx)]
     (if (and (< nx nV)
              (< ny nV)
@@ -181,20 +182,21 @@
           l))))
 
 (defn- visit-grid [G l]
-  (let [bl (:baseling G)
+  (let [bl (:baseline G)
         R (:rows G)
         h (:y l)]
-    (println "bl R h" bl R h)
+    (comment (println "bl R h (h ≥ bl)" bl (count R) h (>= h bl)))
     (if (>= h bl)
       (let [nr (Math/ceil (/ (- h bl) (:dG G)))]
         (if (< nr (count R))
           (let [x (:x l)
                 r (nth R nr)
+                C (:cells r)
                 lx (:left r)]
             (if (>= x lx)
               (let [nc (Math/ceil (/ (- x lx) (:dG G)))]
-                (if (< nc (count r))
-                  (list (:nV G) (:dV G) (nth r nc) l))))))))))
+                (if (< nc (count C))
+                  (visit-speed (:nV G) (:dV G) (nth C nc) l))))))))))
 
 (defn- landers-up [dG fV l-pad]
   (map (fn [x] (move-back (->Lander x (:ay l-pad) 0.0 (- fV) 0 0 0 true) [0 4]))
@@ -211,6 +213,7 @@
   (def ^:private ^:const r-shell r))
 
 (def ^:private grid (build-grid dG dV nV l-shell r-shell l-pad i-lander))
+(keep (partial visit-grid grid) (landers-up dG fV l-pad)) 
 
 (r/update-scene :surface surface)
 (r/update-scene :landing-pad l-pad)
@@ -219,7 +222,7 @@
 (r/update-scene :lander
                 (concat (take-while (partial alive? shell)
                                     (reductions move i-lander (repeat [0 2])))
-                        (identity (keep visit-grid (landers-up dG fV l-pad)))))
+                        (landers-up dG fV l-pad)))
 
 (r/update-scene :grid grid)
 
@@ -227,8 +230,4 @@
 
 (move-back (->Lander 0.0 0.0 0.0 -40.0 0 0 4 true) [0 4])
 
-(count (:rows grid))
 
-(keep (partial visit-grid grid) (landers-up dG fV l-pad))
-
-(visit-grid grid (first (landers-up dG fV l-pad)))
