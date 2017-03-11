@@ -83,8 +83,8 @@
         y  (:y l)
         vx (:vx l)
         vy (:vy l)
-        ax (* (:power l) (Math/sin (:angle l)))
-        ay (* (:power l) (Math/cos (:angle l)))]
+        ax (* (:power l) (Math/sin (Math/toRadians (+ 0 (:angle l)))))
+        ay (* (:power l) (Math/cos (Math/toRadians (+ 0 (:angle l)))))]
     (q/no-stroke)
     (q/fill 0)
     (q/ellipse (:x l) (:y l) 4 4)

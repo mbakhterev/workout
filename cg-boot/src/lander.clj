@@ -134,7 +134,7 @@
 (defn- mark-alive [surface l] (assoc l :alive (alive? surface l)))
 
 (def ^:private ^:const dG 20.0)
-(def ^:private ^:const dV 2.0)
+(def ^:private ^:const dV 1.0)
 (def ^:private ^:const nV 50) 
 (def ^:private ^:const fV 38.0)  
 
@@ -163,15 +163,13 @@
         top (min (+ (:y lander) (* 4 dG)) y-max)]
     (->Grid dG dV nV h (mapv (partial build-row dG nV l-rock r-rock) (range h top dG)))))
 
-
-
 (defn- arrived? [dG dV T l]
   (and (<= (Math/abs ^double (- (:x T) (:x l))) dG)
        (<= (Math/abs ^double (- (:y T) (:y l))) dG)
        (<= (Math/abs ^double (- (:vx T) (:vx l))) dV)
        (<= (Math/abs ^double (- (:vy T) (:vy l))) dV)))
 
-(defn- visit-speed [nV dV ^booleans array l]
+(defn- speed-visited? [nV dV ^booleans array l]
   (let [lvx (:vx l)
         lvy (:vy l)
         offset (* nV nV (+ (if (neg? lvx) 2 0)
@@ -182,10 +180,9 @@
     (if (and (< nx nV)
              (< ny nV)
              (not (aget array idx)))
-      (do (aset array idx true)
-          l))))
+      (aset array idx true))))
 
-(defn- visit-grid [G l]
+(defn- grid-visited? [G l]
   (let [bl (:baseline G)
         R (:rows G)
         h (:y l)]
@@ -200,19 +197,21 @@
             (if (>= x lx)
               (let [nc (Math/ceil (/ (- x lx) (:dG G)))]
                 (if (< nc (count C))
-                  (visit-speed (:nV G) (:dV G) (nth C nc) l))))))))))
+                  (speed-visited? (:nV G) (:dV G) (nth C nc) l))))))))))
 
 (defn- landers-up [dG fV l-pad]
   (map (fn [x] (move-back (->Lander x (:ay l-pad) 0.0 (- fV) 0 0 0 true) 0 4))
        (range (+ (:ax l-pad) dG) (:bx l-pad) dG)))
+
+(defn- paths-up [dG fV l-pad] (map list (landers-up dG fV l-pad)))
 
 (defn- estimate [T l]
   (let [dx (- (:x T) (:x l))
         dy (- (:y T) (:y l))
         dvx (- (:vx T) (:vx l))
         dvy (- (:vy T) (:vy l))]
-    (+ (:fuel l) 
-       (+ (* dvx dvx) (* dvy dvy)) 
+    (+ (* (:fuel l) (:fuel l)) 
+;       (+ (* dvx dvx) (* dvy dvy)) 
        (Math/sqrt (+ (* dx dx) (* dy dy))))))
 
 (defn- path-estimate [T p] (estimate T (first p)))
@@ -240,18 +239,28 @@
 
 (defn- path-cloud [path]
   (let [l (first path)]
-    (for [p (power-cloud (:power l)) a (angle-cloud (:angle l))] 
+    (for [p (nth power-cloud (:power l)) a (angle-cloud (:angle l))] 
       (cons (move-back l a p) path))))
 
-(defn- search [grid target paths]
-  (let [cmp (fn [x y] (compare (path-estimate target x)
-                               (path-estimate target y)))
-        visit (fn [p] (visit-grid grid (first p)))]
-    (loop [queue (apply sorted-set-cmp paths)]
+(defn- mk-compare-path [T] (fn [x y] (compare (path-estimate T x)
+                                              (path-estimate T y))))
+
+(defn- mk-pass-grid [G] (fn [p] (if-not (grid-visited? G (first p)) p)))
+
+(defn- search [grid target paths N]
+  (let [cmp (mk-compare-path target)
+        pass (mk-pass-grid grid)]
+    (loop [queue (apply sorted-set-by cmp (doall (keep pass paths))) n N]
+      (comment (println (map (partial path-estimate target) (take 4 queue))))
       (if-let [p (first queue)]
-        (if (arrived? (:dG grid) (:dV grid) target (first p))
-          p
-          (recur (into queue (doall (keep visit (path-cloud p))))))))))
+        (cond (zero? n)
+              queue
+
+              (arrived? (:dG grid) (:dV grid) target (first p))
+              (list p)
+
+              :else
+              (recur (into (rest queue) (doall (keep pass (path-cloud p)))) (- n 1)))))))
 
 (def ^:private ^:const test-id 0)
 (def ^:private ^:const s-points (surface-points (:surface (test-data test-id))))
@@ -263,17 +272,39 @@
   (def ^:private ^:const l-shell l)
   (def ^:private ^:const r-shell r))
 
-(def ^:private grid (build-grid dG dV nV l-shell r-shell l-pad i-lander))
+(defn- new-grid [] (build-grid dG dV nV l-shell r-shell l-pad i-lander))
+
+(def ^:private grid (new-grid))
+
+(def ^:private ^:const i-paths (paths-up (* 16 dG) fV l-pad))
+
+(count i-paths)
+
+(let [G (new-grid)
+      pass (mk-pass-grid G)
+      cmp (mk-compare-path i-lander)
+      kp (keep pass i-paths)
+      Q (apply sorted-set-by cmp kp)
+      ]
+  (count Q) 
+  Q
+  )
+
+(comment (search grid i-lander (paths-up dG fV l-pad)))
+
+(time (let [G (new-grid)]
+        (def ^:private search-paths (search G i-lander i-paths 1))))
 
 (r/update-scene :surface surface)
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell)
+(r/update-scene :grid grid) 
 
-(r/update-scene :lander
-                (concat (take-while (partial alive? shell)
-                                    (reductions (wrap move) i-lander (repeat [0 2])))
-                        (keep (partial visit-grid grid) (landers-up dG fV l-pad))))
-
-(r/update-scene :grid grid)
+(r/update-scene :lander (concat (take-while (partial alive? shell)
+                                            (reductions (wrap move) i-lander (repeat [90 4])))
+                                (reduce concat search-paths)))
 
 (time (reduce + (map (comp count :cells) (:rows grid))))
+
+(doseq [p (path-cloud (first i-paths))]
+  (println (map (juxt :angle :power) p)))
