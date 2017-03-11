@@ -29,14 +29,13 @@
             (+ (:x a)
                (/ (- (:x b) (:x a)) 2.0))))  
 
-; Размер ячейки сетки в условных единицах. Ячейка - это квадрат с ребром длиной
-; dG. Почему dG = 20? Чтобы половина ребра, rG = 10. Почему rG = 10? От балды
-(def ^:const dG 20.0)
-(def ^:const rG (/ dG 2.0)) 
+(defrecord Grid [^double  dG
+                 ^double  dV
+                 ^long    nV
+                 ^double  baseline
+                          rows])
 
-(defrecord Grid [^double baseline rows])
-(defrecord Row [^double left cells])
-(defrecord Cell [vx vy])
+(defrecord Row [^double left
+                        cells])
 
-(defn make-cell [vx-range vy-range] (Cell. (long-array (/ vx-range 32)) 
-                                           (long-array (/ vy-range 32))))
+(defrecord Cell [vx+ vx- vy+ vy-])

@@ -60,13 +60,22 @@
 
 (defn- correct-cell [c] (r/->Point (* factor-x (:x c)) (invert-y (* factor-y (:y c)))))
 
+(defn- correct-row [R] (r/->Row (* factor-x (:left R)) (:cells R)))
+
+(defn- correct-grid [G]
+  (r/->Grid (:dG G)
+            (:dV G)
+            (:nV G)
+            (invert-y (* factor-y (:baseline G)))
+            (mapv correct-row (:rows G))))
+
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag
                            :surface (correct-surface value)
                            :shell (correct-surface value)
                            :landing-pad (correct-y-section (scale-section value))
                            :lander (map correct-lander value)
-                           :grid (map (fn [r] (map correct-cell r)) value)))
+                           :grid (correct-grid value)))
   true)
 
 (defn- draw-lander [l]
@@ -84,8 +93,10 @@
     (q/stroke 255 0 0)
     (q/line x y (+ x (* 4 ax)) (+ y (* 4 ay))))) 
 
-(def ^:private ^:const x-cell-rG (* (- r/rG 3) factor-x))
-(def ^:private ^:const y-cell-rG (* (- r/rG 3) factor-y))
+(def ^:private ^:const rG 10.0)
+
+(def ^:private ^:const x-cell-rG (* (- rG 3) factor-x))
+(def ^:private ^:const y-cell-rG (* (- rG 3) factor-y))
 
 (defn- draw-cell [c]
   (let [mx (:x c)
@@ -93,6 +104,24 @@
     (q/stroke (- 256 128))
     (q/no-fill)
     (q/rect (- mx x-cell-rG) (- my y-cell-rG) (* 2 x-cell-rG) (* 2 y-cell-rG)))) 
+
+(defn- draw-grid [G]
+  (q/stroke 128)
+  (q/stroke-weight 2)
+  (let [dx (* factor-x (:dG G))
+        dy (- (* factor-y (:dG G)))
+        rx (* dx 0.5)
+        ry (* dy 0.5)
+        r  (first (:rows G))]
+    (if r (loop [x (+ (:left r) rx)
+                 n (count (:cells r))
+                 y (+ (:baseline G) ry)
+                 R (rest (:rows G))]
+            (cond (> n 0) (do (q/point x y)
+                              (recur (+ x dx) (- n 1) y R))
+
+                  (not (empty? R)) (let [nr (first R)]
+                                     (recur (+ (:left nr) rx) (count (:cells nr)) (+ y dy) (rest R))))))))
 
 (defn- draw []
   (q/background 255)
@@ -124,7 +153,7 @@
       (doseq [lander trace] (draw-lander lander)))
     
     (if-let [grid (:grid sc)]
-      (doseq [row grid cell row] (draw-cell cell))))) 
+      (draw-grid grid)))) 
 
 (defn- setup []
   (q/smooth)
