@@ -1,5 +1,4 @@
-(ns lander (:require [render :as r]
-                     [geometry :refer :all]))
+(ns lander (:require [geometry :refer :all]))
 
 (defrecord Lander [^double x
                    ^double y
@@ -54,7 +53,7 @@
               power
               true))))
 
-(defn- move-back [l angle power]
+(defn move-back [l angle power]
   (if (not (:alive l))
     l
     (let [t    1.0
@@ -79,7 +78,7 @@
 (def ^:private ^:const ^double x-max (- 7000.0 1.0))
 (def ^:private ^:const ^double y-max (- 3000.0 1.0))
 
-(defn- ^boolean alive? [surface ^records.Lander l]
+(defn- alive? [surface l]
   (let [x (:x l)
         y (:y l)]
     (and (<= 0 x x-max)
@@ -91,8 +90,6 @@
                     surface)))))
 
 (defn- mark-alive [surface l] (assoc l :alive (alive? surface l)))
-
-
 
 (defn- gen-cloud [base cloud array-convert]
   (let [A (first base)
@@ -115,7 +112,7 @@
                                               (range -1.0 2.0)
                                               double-array))
 
-(defn- path-cloud [path]
+(defn path-cloud [path]
   (let [l (first path)]
     (for [p (nth power-cloud (:power l)) a (angle-cloud (:angle l))] 
       (cons (move-back l a p) path))))

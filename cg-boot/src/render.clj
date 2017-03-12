@@ -1,5 +1,6 @@
 (ns render (:require [quil.core :as q]
-                     [records :as r]))
+                     [lander :as l]
+                     [geometry :as g]))
 
 (set! *warn-on-reflection* true)
 
@@ -29,8 +30,8 @@
 
 (def ^:private scene (atom {}))
 
-(defn- ^records.Lander scale-section [^records.Section s]
-  (r/->Section (* factor-x (:ax s))
+(defn- scale-section [s]
+  (g/->Section (* factor-x (:ax s))
                (* factor-y (:ay s))
                (* factor-x (:bx s))
                (* factor-y (:by s))
@@ -39,8 +40,8 @@
 
 (defn- invert-y [^double y] (- display-height y))
 
-(defn- ^records.Lander correct-y-section [^records.Section s]
-  (r/->Section (:ax s) (invert-y (:ay s))
+(defn- correct-y-section [s]
+  (g/->Section (:ax s) (invert-y (:ay s))
                (:bx s) (invert-y (:by s))
                (:k s)
                (:mx s)))
@@ -49,7 +50,7 @@
   (map (comp correct-y-section scale-section) sections))
 
 (defn- correct-lander [l]
-  (r/->Lander (* factor-x (:x l))
+  (l/->Lander (* factor-x (:x l))
               (invert-y (* factor-y (:y l)))
               (* factor-x (:vx l))
               (- (* factor-y (:vy l)))
@@ -58,16 +59,7 @@
               (:power l)
               (:alive l)))
 
-(defn- correct-cell [c] (r/->Point (* factor-x (:x c)) (invert-y (* factor-y (:y c)))))
 
-(defn- correct-row [R] (r/->Row (* factor-x (:left R)) (:cells R)))
-
-(defn- correct-grid [G]
-  (r/->Grid (:dG G)
-            (:dV G)
-            (:nV G)
-            (invert-y (* factor-y (:baseline G)))
-            (mapv correct-row (:rows G))))
 
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag
