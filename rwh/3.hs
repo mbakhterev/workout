@@ -1,3 +1,5 @@
+import Data.List
+
 data BookInfo
   = Book Int String [String] deriving (Show)
 
@@ -143,3 +145,54 @@ samenodes (Node a _ _) (Node b _ _)
   | a == b = Just a
 
 samenodes n m = Nothing
+
+fnthree n
+  | n <= 10 = 20 * n
+  | n >  10 = 40 * n
+
+icedrop n xs | n <= 0 = xs
+icedrop _ []          = []
+icedrop n (_:xs)      = icedrop (n-1) xs
+
+lengther :: [a] -> Int
+lengther = foldl (+) 0 . map (const 1)
+
+average :: Fractional t => [t] -> t
+average = snd . foldl cma (0.0, 0.0)
+  where cma (n, s) x = (n+1.0, (x + n*s) / (n+1.0))
+
+palindromize l = l ++ reverse l
+
+ispalindrome t = t == reverse t
+
+lensort :: [[a]] -> [[a]]
+lensort = sortBy (flip (compare . length) . length)
+
+interpose a = tail . foldl ((++) . flip (++) [a]) []
+
+theight (Node x a b) = 1 + max (theight a) (theight b)
+theight Empty = 0
+
+data Direction
+  = ToLeft | ToRight | Straight
+    deriving (Show)
+
+data Point2D = P2D Double Double
+
+direction a b c
+  | project a b c > 0 = ToLeft
+  | project a b c < 0 = ToRight
+  | otherwise = Straight
+  where
+    normal (P2D a b) = P2D (- b) a
+    dot (P2D a b) (P2D x y) = a*x + b*y
+    vec (P2D a b) (P2D x y) = P2D (x-a) (y-b)
+    project a b c = dot (normal (vec a b)) (vec b c)
+
+directions (a:b:c:ps)
+  = direction a b c : directions (b:c:ps)
+directions ps
+  = []
+
+
+
