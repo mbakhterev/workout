@@ -175,21 +175,28 @@ theight Empty = 0
 
 data Direction
   = ToLeft | ToRight | Straight
-    deriving (Show)
+    deriving (Show, Eq)
 
 data Point2D = P2D Double Double deriving (Show)
+data Vector2D = V2D Double Double deriving (Show)
+
+vec (P2D a b) (P2D x y) = V2D (x-a) (y-b)
+len (V2D a b) = sqrt (a*a + b*b)
+dot (V2D a b) (V2D x y) = a*x + b*y
+cross (V2D a b) (V2D x y) = a*y - b*x
+crosspoints a b c = cross (vec a b) (vec b c)
+
+cosvec a b
+  | len a /= 0 && len b /= 0 = dot a b / (len a * len b)
+  | otherwise = -1
 
 direction a b c
-  | project a b c > 0 = ToLeft
-  | project a b c < 0 = ToRight
+  | crosspoints a b c > 0 = ToLeft
+  | crosspoints a b c < 0 = ToRight
   | otherwise = Straight
-  where
-    normal (P2D a b) = P2D (- b) a
-    dot (P2D a b) (P2D x y) = a*x + b*y
-    vec (P2D a b) (P2D x y) = P2D (x-a) (y-b)
-    project a b c = dot (normal (vec a b)) (vec b c)
-
-directions (a:b:c:ps) = direction a b c : directions (b:c:ps)
+ 
+directions (a:b:c:ps)
+  = direction a b c : directions (b:c:ps)
 directions ps = []
 
 testpoints = [(P2D 0 20),
@@ -200,7 +207,22 @@ testpoints = [(P2D 0 20),
               (P2D 7 9),
               (P2D 100 (- 13))]
 
-minpoint= minimumBy cmp where cmp (P2D a b) (P2D x y) = compare (b, a) (y, x)
+minpoint :: [Point2D] -> Point2D
+minpoint
+  = minimumBy cmp
+  where cmp (P2D a b) (P2D x y) = compare (b, a) (y, x)
 
+sortpoints p
+  = sortBy cmp
+  where val a = - cosvec (vec p a) (V2D 1 0)
+        cmp a b = compare (val a) (val b)
 
-                                
+leftpush (b:a:stack) p
+  | direction a b p == ToRight = leftpush (a:stack) p
+  | otherwise = p:b:a:stack
+leftpush cs p = p:cs
+
+grahamscan points
+  = foldl leftpush [p] sorted
+  where p = minpoint points
+        sorted = sortpoints p points
