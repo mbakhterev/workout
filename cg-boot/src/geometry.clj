@@ -23,17 +23,17 @@
              (+ (:x a)
                 (/ (- (:x b) (:x a)) 2.0))))
 
-(defn- surface-points [raw-numbers]
+(defn surface-points [raw-numbers]
   (map (fn [p] (apply ->Point p)) (partition 2 raw-numbers)))
 
-(defn- surface-sections [points]
+(defn surface-sections [points]
   (map (fn [s] (apply make-section s)) (partition 2 1 points)))
 
-(defn- find-landing-pad [points]
+(defn find-landing-pad [points]
   (letfn [(is-pad ([[a b]] (< -0.01 (- (:y a) (:y b)) 0.01)))]
     (apply make-section (first (filter is-pad (partition 2 1 points))))))
 
-(defn- surface-shell [points landing]
+(defn surface-shell [points landing]
   (letfn [(monotonize [points]
             (loop [[p & P] (rest points)
                    max-y (:y (first points))

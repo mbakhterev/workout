@@ -1,5 +1,6 @@
 (ns main (:gen-class)
          (:require [lander :refer :all]
+                   [geometry :refer :all]
                    [render :as r]))
 
 (defn- dump [& args] (binding [*out* *err*] (apply println args)))
@@ -22,7 +23,7 @@
 
 (def ^:private ^:const test-id 0)
 (def ^:private ^:const s-points (surface-points (:surface (test-data test-id))))
-(def ^:private ^:const i-lander (apply ->Lander (conj (:lander (test-data test-id)) true))) 
+(def ^:private ^:const i-lander (apply ->Lander (conj (:lander (test-data test-id))))) 
 (def ^:private ^:const l-pad (find-landing-pad s-points))
 (def ^:private ^:const surface (surface-sections s-points))
 (let [[l r] (surface-shell s-points l-pad)]
@@ -35,6 +36,4 @@
 (r/update-scene :shell shell) 
 
 (r/update-scene :lander (concat (take-while (partial alive? shell)
-                                            (reductions (wrap move) i-lander (repeat [90 4])))
-                                (reduce concat (take 10 search-paths))
-                                (reduce concat i-paths)))
+                                            (reductions (wrap move) i-lander (repeat [90 4])))))

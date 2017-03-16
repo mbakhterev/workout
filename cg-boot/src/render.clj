@@ -56,10 +56,7 @@
               (- (* factor-y (:vy l)))
               (:fuel l)
               (:angle l)
-              (:power l)
-              (:alive l)))
-
-
+              (:power l)))
 
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag
