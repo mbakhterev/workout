@@ -177,7 +177,7 @@ data Direction
   = ToLeft | ToRight | Straight
     deriving (Show)
 
-data Point2D = P2D Double Double
+data Point2D = P2D Double Double deriving (Show)
 
 direction a b c
   | project a b c > 0 = ToLeft
@@ -189,10 +189,18 @@ direction a b c
     vec (P2D a b) (P2D x y) = P2D (x-a) (y-b)
     project a b c = dot (normal (vec a b)) (vec b c)
 
-directions (a:b:c:ps)
-  = direction a b c : directions (b:c:ps)
-directions ps
-  = []
+directions (a:b:c:ps) = direction a b c : directions (b:c:ps)
+directions ps = []
+
+testpoints = [(P2D 0 20),
+              (P2D 1 3),
+              (P2D 4 5),
+              (P2D 6 7),
+              (P2D 11 45),
+              (P2D 7 9),
+              (P2D 100 (- 13))]
+
+minpoint= minimumBy cmp where cmp (P2D a b) (P2D x y) = compare (b, a) (y, x)
 
 
-
+                                

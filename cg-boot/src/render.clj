@@ -66,8 +66,7 @@
                            :surface (correct-surface value)
                            :shell (correct-surface value)
                            :landing-pad (correct-y-section (scale-section value))
-                           :lander (map correct-lander value)
-                           :grid (correct-grid value)))
+                           :lander (map correct-lander value)))
   true)
 
 (defn- draw-lander [l]
@@ -142,10 +141,7 @@
                     (:bx s) (:by s)))))
     
     (if-let [trace (:lander sc)]
-      (doseq [lander trace] (draw-lander lander)))
-    
-    (if-let [grid (:grid sc)]
-      (draw-grid grid)))) 
+      (doseq [lander trace] (draw-lander lander))))) 
 
 (defn- setup []
   (q/smooth)

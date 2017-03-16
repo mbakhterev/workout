@@ -1,5 +1,7 @@
 (ns lander (:require [geometry :refer :all]))
 
+(set! *warn-on-reflection* true)
+
 (defrecord Lander [^double x
                    ^double y
                    ^double vx
@@ -7,24 +9,22 @@
                    ^long fuel
                    ^long angle
                    ^long power
-                   ^boolean alive]) 
-
-(set! *warn-on-reflection* true)
+                   ^boolean alive])
 
 ; Синусы и косинусы для рассчёта проекции тяги. Угол задаётся от оси (+ PI/2).
 ; Симметричность cos не учитывается, чтобы не усложнять формулу пересчёта угла phi
 ; в индекс таблицы i. Формула должна быть такой i = phi + 90
 
-(def ^:private ^:const ^doubles cos-table
+(def ^:private ^:const cos-table
   (mapv (fn [d] (Math/cos (Math/toRadians (+ d 90)))) (range -90 91)))
 
-(def ^:private ^:const ^doubles sin-table
+(def ^:private ^:const sin-table
   (mapv (fn [d] (Math/sin (Math/toRadians (+ d 90)))) (range -90 91)))
 
 ; Функции для доступа в таблицы по значению угла
 
-(defn- x-power [^long phi] (nth cos-table (+ phi 90)))
-(defn- y-power [^long phi] (nth sin-table (+ phi 90)))
+(defn- x-power [phi] (nth cos-table (+ phi 90)))
+(defn- y-power [phi] (nth sin-table (+ phi 90)))
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
 ; модуля и то управление, которое привело его в это положение. Положение -
@@ -34,49 +34,27 @@
 (def ^:private ^:const M 3.711)  
 
 (defn- move [l angle power]
-  (if (not (:alive l))
-    l
-    (let [t    1.0
-          x    (:x l)
-          y    (:y l)
-          vx   (:vx l)
-          vy   (:vy l)
-          fuel (:fuel l)
-          ax   (* power (x-power angle))
-          ay   (- (* power (y-power angle)) M)]
+  (let [t    1.0
+        x    (:x l)
+        y    (:y l)
+        vx   (:vx l)
+        vy   (:vy l)
+        fuel (:fuel l)
+        ax   (* power (x-power angle))
+        ay   (- (* power (y-power angle)) M)]
     (->Lander (+ x (* vx t) (* 0.5 ax t t))
               (+ y (* vy t) (* 0.5 ay t t))
               (+ vx (* ax t))
               (+ vy (* ay t))
               (- fuel (* power t))
               angle
-              power
-              true))))
+              power)))
 
-(defn move-back [l angle power]
-  (if (not (:alive l))
-    l
-    (let [t    1.0
-          x    (:x l)
-          y    (:y l)
-          vx   (:vx l)
-          vy   (:vy l)
-          fuel (:fuel l)
-          ax   (* power (x-power angle))
-          ay   (- (* power (y-power angle)) M)]
-      (->Lander (- x (* vx t) (* 0.5 ax t t))
-                (- y (* vy t) (* 0.5 ay t t))
-                (- vx (* ax t))
-                (- vy (* ay t))
-                (+ fuel (* power t))
-                angle
-                power
-                true))))
 
 (defn- wrap [f] (fn [l [a p]] (f l a p)))
 
-(def ^:private ^:const ^double x-max (- 7000.0 1.0))
-(def ^:private ^:const ^double y-max (- 3000.0 1.0))
+(def ^:private ^:const x-max (- 7000.0 1.0))
+(def ^:private ^:const y-max (- 3000.0 1.0))
 
 (defn- alive? [surface l]
   (let [x (:x l)
