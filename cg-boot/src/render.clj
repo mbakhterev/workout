@@ -44,12 +44,15 @@
               (:angle l)
               (:power l)))
 
+(defn- correct-trace [t]
+  (assoc t :trace (map correct-lander (:trace t))))
+
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag
                            :surface (correct-surface value)
                            :shell (correct-surface value)
                            :landing-pad (correct-y-section (scale-section value))
-                           :lander (map correct-lander value))
+                           :traces (map correct-trace value))
                      :redraw true)
   true)
 
@@ -125,8 +128,13 @@
                   (q/line (:ax s) (:ay s)
                           (:bx s) (:by s)))))
 
-          (if-let [trace (:lander sc)]
-            (doseq [lander trace] (draw-lander lander))))))
+          (if-let [traces (:traces sc)]
+            (doseq [t traces]
+              (doseq [l (:trace t)] (draw-lander l))
+              (let [l (last (:trace t))
+                    m (:mark t)]
+                (q/text (str (:vx l) " " (:vy l) " " (:angle l) " " (:power l) (if m (str ": " m)))
+                      (+ (:x l) 5) (- (:y l) 5))))))))
   
   (swap! scene assoc :redraw false)) 
 
