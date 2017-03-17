@@ -4,20 +4,6 @@
 
 (set! *warn-on-reflection* true)
 
-(defn- test-draw []
-  (q/stroke (q/random 255))
-  (q/stroke-weight (q/random 20))
-  (q/fill (q/random 255))
-
-  (let [diam (q/random 100)
-        x    (q/random (q/width))
-        y    (q/random (q/height))]
-    (q/ellipse x y diam (* 2 diam))))
-
-(defn- test-setup []
-  (q/smooth)
-  (q/frame-rate 1))
-
 (def ^:private ^:const space-width 7000)
 (def ^:private ^:const space-height 3000) 
 
@@ -63,7 +49,8 @@
                            :surface (correct-surface value)
                            :shell (correct-surface value)
                            :landing-pad (correct-y-section (scale-section value))
-                           :lander (map correct-lander value)))
+                           :lander (map correct-lander value))
+                     :redraw true)
   true)
 
 (defn- draw-lander [l]
@@ -112,33 +99,36 @@
                                      (recur (+ (:left nr) rx) (count (:cells nr)) (+ y dy) (rest R))))))))
 
 (defn- draw []
-  (q/background 255)
-  (comment (q/clear))
   (let [sc (deref scene)]
-    (if-let [surface (:surface sc)]
-      (do (q/stroke 127)
-          (q/stroke-weight 1)
-          (doseq [s surface]
-            (q/line (:ax s) (:ay s)
-                    (:bx s) (:by s)))))
+    (if (:redraw sc)
+      (comment (println "redrawing"))
+      (do (q/background 255)
+          (if-let [surface (:surface sc)]
+            (do (q/stroke 127)
+                (q/stroke-weight 1)
+                (doseq [s surface]
+                  (q/line (:ax s) (:ay s)
+                          (:bx s) (:by s)))))
 
-    (if-let [landing (:landing-pad sc)]
-      (do (q/stroke 0)
-          (q/stroke-weight 1)
-          (let [delta (/ display-height 128)
-                mark-point (fn [x y] (q/line x (- y delta) x (+ y delta)))]
-            (mark-point (:ax landing) (:ay landing))
-            (mark-point (:bx landing) (:by landing)))))
-    
-    (if-let [shell (:shell sc)]
-      (do (q/stroke 0)
-          (q/stroke-weight 1)
-          (doseq [s shell]
-            (q/line (:ax s) (:ay s)
-                    (:bx s) (:by s)))))
-    
-    (if-let [trace (:lander sc)]
-      (doseq [lander trace] (draw-lander lander))))) 
+          (if-let [landing (:landing-pad sc)]
+            (do (q/stroke 0)
+                (q/stroke-weight 1)
+                (let [delta (/ display-height 128)
+                      mark-point (fn [x y] (q/line x (- y delta) x (+ y delta)))]
+                  (mark-point (:ax landing) (:ay landing))
+                  (mark-point (:bx landing) (:by landing)))))
+
+          (if-let [shell (:shell sc)]
+            (do (q/stroke 0)
+                (q/stroke-weight 1)
+                (doseq [s shell]
+                  (q/line (:ax s) (:ay s)
+                          (:bx s) (:by s)))))
+
+          (if-let [trace (:lander sc)]
+            (doseq [lander trace] (draw-lander lander))))))
+  
+  (swap! scene assoc :redraw false)) 
 
 (defn- setup []
   (q/smooth)

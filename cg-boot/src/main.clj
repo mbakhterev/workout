@@ -35,5 +35,6 @@
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell) 
 
-(r/update-scene :lander (concat (take-while (partial alive? shell)
-                                            (reductions (wrap move) i-lander (repeat [90 4])))))
+(r/update-scene :traces {:trace (list (take-while (partial alive? shell)
+                                                  (reductions (wrap move) i-lander (repeat [90 4]))))
+                         :mark \D})
