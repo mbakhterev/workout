@@ -38,3 +38,5 @@
 (r/update-scene :traces (list {:trace (take-while (partial alive? shell)
                                                   (reductions (wrap move) i-lander (repeat [90 4])))
                                :mark \D}))
+
+(count (detect-stages i-lander l-shell l-pad r-shell))

@@ -112,14 +112,69 @@
 ; Рассчёты для стадии последнего снижения: погашение вертикальной скорости с
 ; управлением (vec 0 4) 
 
-(def ^:private ^:cons max-vy 38.0)
-(def ^:private ^:const )
+(def ^:private ^:const max-vy 38.0)
+(def ^:private ^:const h-constraint-reserve 0.125)
+(def ^:private ^:const dx-constraint-reserve 0.125)
 
 ; Вычисляем разницу высот, на которой можем погасить vy, полагая, что управление
 ; уже (vec 0 4). Вычисления в обычной системе координат: Марс внизу 
 
-
-(defn final-stage-h-constrain [vy]
-  (let [ve (- max-vy)
+(defn- descending-constraint-h [l]
+  (let [vy (:vy l)
+        ve (- max-vy)
         ay (- 4.0 M)
-        t  (/ (- ve vy) ay)]))
+        t  (/ (- ve vy) ay)]
+    (if (< t 0)
+      [:ko 0.0 t]
+      [:ok (+ (* vy t) (* 0.5 ay ay t)) t])))
+
+(defn- braking-constraint-core [x vx ax vy]
+  (let [t  (/ (- vx) ax)
+        ay (- M)]
+    (if (< t 0)
+      [:ko 0.0 0.0 t]
+      [:ok (+ (* vy t) (* 0.5 ay ay t))
+           (+ (* vx t) (* 0.5 ay ay t))
+           t]))) 
+
+(defn braking-constraint-h-dx [l landing-pad]
+  (let [x  (:x l)
+        vx (:vx l)
+        vy (:vy l)
+        ax (:ax landing-pad)
+        bx (:bx landing-pad)]
+    (cond (< x ax) (braking-constraint-core x vx -4.0 vy)
+          (> x bx) (braking-constraint-core x vx +4.0 vy)
+          :else    (braking-constraint-core x vx (if (>= vx 0.0) -4.0 +4.0) vy))))
+
+(defn- add-braking-stage [x vx ax bx S]
+  (if-not (and (= 0 vx) (< ax x bx)) (cons {:stage :braking} S) S))
+
+(defn- add-hover-stages [x ax bx l-rock r-rock S] 
+  (let [on-left (fn [s] (if (< x (:bx s) bx) {:stage :hover
+                                              :direction :left
+                                              :section s}))
+
+        on-right (fn [s] (if (> x (:ax s) ax) {:stage :hover
+                                               :direction :right
+                                               :section s}))]
+
+    (concat (cond (< x ax) (keep on-left l-rock)
+                  (> x bx) (keep on-right (reverse r-rock)))
+            S)))
+
+(defn- add-reverse-stage [x vx ax bx S]
+  (if (or (and (< x ax) (< vx 0.0))
+          (and (> x bx) (> vx 0.0)))
+    (cons {:stage :reverse} S)
+    S))
+
+(defn detect-stages [l l-rock pad r-rock]
+  (let [x  (:x l)
+        vx (:vx l)
+        ax (:ax pad)
+        bx (:bx pad)]
+    (->> (list {:stage :descending})
+         (add-braking-stage x vx ax bx)
+         (add-hover-stages x ax bx l-rock r-rock)
+         (add-reverse-stage x vx ax bx))))

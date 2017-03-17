@@ -133,13 +133,15 @@
               (doseq [l (:trace t)] (draw-lander l))
               (let [l (last (:trace t))
                     m (:mark t)]
-                (q/text (str (:vx l) " " (:vy l) " " (:angle l) " " (:power l) (if m (str ": " m)))
-                      (+ (:x l) 5) (- (:y l) 5))))))))
+                (q/text (str (apply format "%.3f/%.3f/%d/%d" ((juxt :vx :vy :angle :power) l))
+                             (if m (format "/%s" (str (:mark t)))))
+                        (+ (:x l) 5) (- (:y l) 5))))))))
   
   (swap! scene assoc :redraw false)) 
 
 (defn- setup []
   (q/smooth)
+  (q/text-font (q/create-font "DejaVu Sans Mono" 8 true))
   (q/background 255)
   (q/frame-rate 1))
 
