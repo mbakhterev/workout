@@ -41,7 +41,7 @@
           (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
           (< 0 delta) (if (< delta max-delta) goal (- current max-delta)))))
 
-(defn move [l control-angle control-power]
+(defn move [control-angle control-power l]
   (let [angle (control-to (:angle l) control-angle angle-max-delta)
         power (control-to (:power l) control-power power-max-delta)
         t     1.0
@@ -60,10 +60,10 @@
               angle
               power)))
 
-(defn- control-match? [l angle power] (and (= (:angle l) angle)
+(defn- control-match? [angle power l] (and (= (:angle l) angle)
                                            (= (:power l) power))) 
 
-(defn wrap [f] (fn [l [a p]] (f l a p)))
+(defn wrap [f] (fn [l [a p]] (f a p l)))
 
 (def ^:private ^:const x-max (- 7000.0 1.0))
 (def ^:private ^:const y-max (- 3000.0 1.0))
@@ -78,10 +78,6 @@
                                        ry (- y (:ay s))]
                                    (<= ry (* (:k s) rx)))))
                     surface)))))
-
-(defn- mark-alive [surface l] (assoc l :alive (alive? surface l)))
-
-
 
 (defn- gen-cloud [base cloud array-convert]
   (let [A (first base)
@@ -147,10 +143,10 @@
           (> x bx) (braking-constraint-core x vx +4.0 vy)
           :else    (braking-constraint-core x vx (if (>= vx 0.0) -4.0 +4.0) vy))))
 
-(defn- add-braking-stage [x vx ax bx S]
-  (if-not (and (= 0 vx) (< ax x bx)) (cons {:stage :braking} S) S))
+(defn- add-braking-stage [x vx ax bx stage]
+  (if (and (= 0 vx) (< ax x bx)) stage (cons {:stage :braking} stage)))
 
-(defn- add-hover-stages [x ax bx l-rock r-rock S] 
+(defn- add-hover-stages [x ax bx l-rock r-rock stage] 
   (let [on-left (fn [s] (if (< x (:bx s) bx) {:stage :hover
                                               :direction :left
                                               :section s}))
@@ -161,13 +157,13 @@
 
     (concat (cond (< x ax) (keep on-left l-rock)
                   (> x bx) (keep on-right (reverse r-rock)))
-            S)))
+            stage)))
 
-(defn- add-reverse-stage [x vx ax bx S]
+(defn- add-reverse-stage [x vx ax bx stage]
   (if (or (and (< x ax) (< vx 0.0))
           (and (> x bx) (> vx 0.0)))
-    (cons {:stage :reverse} S)
-    S))
+    (cons {:stage :reverse} stage)
+    stage))
 
 (defn detect-stages [l l-rock pad r-rock]
   (let [x  (:x l)
@@ -178,3 +174,12 @@
          (add-braking-stage x vx ax bx)
          (add-hover-stages x ax bx l-rock r-rock)
          (add-reverse-stage x vx ax bx))))
+
+(defn- solve-hover [x vx h vy xe])
+
+(defn integrate-hover [stage lander angle power]
+  (let [stable (loop [l lander R (vector)]
+                 (if (control-match? angle power l)
+                   (conj R l) (recur (move angle power l)
+                                     (conj R (move angle power l)))))]
+    stable))

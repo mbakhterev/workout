@@ -37,6 +37,8 @@
 
 (r/update-scene :traces (list {:trace (take-while (partial alive? shell)
                                                   (reductions (wrap move) i-lander (repeat [90 4])))
-                               :mark \D}))
+                               :mark \D}
+                              {:trace (integrate-hover (first (detect-stages i-lander l-shell l-pad r-shell))
+                                                       i-lander 90 0)}))
 
 (count (detect-stages i-lander l-shell l-pad r-shell))
