@@ -6,9 +6,9 @@
                    ^double y
                    ^double vx
                    ^double vy
-                   ^long fuel
-                   ^long angle
-                   ^long power])
+                     ^long fuel
+                     ^long angle
+                     ^long power])
 
 ; Синусы и косинусы для рассчёта проекции тяги. Угол задаётся от оси (+ PI/2).
 ; Симметричность cos не учитывается, чтобы не усложнять формулу пересчёта угла phi
@@ -27,8 +27,7 @@
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
 ; модуля и то управление, которое привело его в это положение. Положение -
-; вектор в фазовом пространстве (vec x y dx dy fuel). Нужно быстро считать,
-; поэтому juxt не используем.
+; вектор в фазовом пространстве (vec x y dx dy fuel)
 
 (def ^:private ^:const M 3.711)  
 
@@ -41,10 +40,16 @@
           (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
           (< 0 delta) (if (< delta max-delta) goal (- current max-delta)))))
 
-(defn move [control-angle control-power l]
-  (let [angle (control-to (:angle l) control-angle angle-max-delta)
-        power (control-to (:power l) control-power power-max-delta)
-        t     1.0
+(defn control-match? [angle power l] (and (= (:angle l) angle)
+                                          (= (:power l) power)))
+
+(defn move [control-angle control-power t l]
+  (let [m (control-match? control-angle control-power l)]
+    (if (and (not= 1.0 t) (not m))
+      (throw (Exception. (format "cannot move that: %.3f %b" t m)))))
+
+  (let [angle (control-to (:angle l) control-angle (* t angle-max-delta))
+        power (control-to (:power l) control-power (* t power-max-delta))
         x     (:x l)
         y     (:y l)
         vx    (:vx l)
@@ -60,10 +65,7 @@
               angle
               power)))
 
-(defn- control-match? [angle power l] (and (= (:angle l) angle)
-                                           (= (:power l) power))) 
-
-(defn wrap [f] (fn [l [a p]] (f a p l)))
+(defn wrap [t f] (fn [l [a p]] (f a p t l)))
 
 (def ^:private ^:const x-max (- 7000.0 1.0))
 (def ^:private ^:const y-max (- 3000.0 1.0))
@@ -180,6 +182,6 @@
 (defn integrate-hover [stage lander angle power]
   (let [stable (loop [l lander R (vector)]
                  (if (control-match? angle power l)
-                   (conj R l) (recur (move angle power l)
-                                     (conj R (move angle power l)))))]
+                   (conj R l) (recur (move angle power 1.0 l)
+                                     (conj R (move angle power 1.0 l)))))]
     stable))
