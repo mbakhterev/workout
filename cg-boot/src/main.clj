@@ -27,7 +27,7 @@
 (def ^:private ^:const l-pad (find-landing-pad s-points))
 (def ^:private ^:const surface (surface-sections s-points))
 (let [[l r] (surface-shell s-points l-pad)]
-  (def ^:private ^:const shell (vec (concat l r)))
+  (def ^:private ^:const shell (vec (concat l (list l-pad) r)))
   (def ^:private ^:const l-shell l)
   (def ^:private ^:const r-shell r))
  
@@ -42,11 +42,4 @@
 
                               {:trace (integrate-hover (first (detect-stages i-lander
                                                                              l-shell l-pad r-shell))
-                                                       i-lander 0 4)}))
-
-(count (detect-stages i-lander l-shell l-pad r-shell))
-
-(integrate-hover (first (detect-stages i-lander l-shell l-pad r-shell)) i-lander 90 0)
-(take-while (partial alive? shell) (reductions (wrap 0.5 move) i-lander (repeat [90 4])))
-
-(move -90 0 0.4 i-lander)
+                                                       i-lander 90 0)}))

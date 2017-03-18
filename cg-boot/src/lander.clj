@@ -75,7 +75,7 @@
         y (:y l)]
     (and (<= 0 x x-max)
          (<= 0 y y-max)
-         (not (some (fn [s] (and (< (:ax s) x (:bx s))
+         (not (some (fn [s] (and (<= (:ax s) x (:bx s))
                                  (let [rx (- x (:ax s))
                                        ry (- y (:ay s))]
                                    (<= ry (* (:k s) rx)))))
@@ -177,11 +177,36 @@
          (add-hover-stages x ax bx l-rock r-rock)
          (add-reverse-stage x vx ax bx))))
 
+(defn- solve-square-equation [a b c]
+  (let [D (- (* b b) (* 4 a c))]
+    (if (< D 0.0)
+      [:ko 0.0 0.0]
+      (let [D-sqrt (Math/sqrt D)
+            a-rcpr (/ (* 2.0 a))]
+        [:ok (* (+ (- b) D-sqrt) a-rcpr)
+             (* (- (- b) D-sqrt) a-rcpr)]))))
+
+(defn- hover? [stage l]
+  (let [x  (:x l)
+        y  (:y l)
+        S  (:section stage)
+        k  (:k S)
+        ax (:ax S)
+        bx (:bx S)
+        ay (:ay S)
+        by (:by S)]
+    (and (<= ax x bx)
+         (> (- y ay) (* k (- x ax)))
+         (<= 0 x x-max)
+         (<= 0 y y-max))))
+
 (defn- solve-hover [x vx h vy xe])
 
 (defn integrate-hover [stage lander angle power]
   (let [stable (loop [l lander R (vector)]
-                 (if (control-match? angle power l)
-                   (conj R l) (recur (move angle power 1.0 l)
-                                     (conj R (move angle power 1.0 l)))))]
+                 (if (or (control-match? angle power l)
+                         (not (hover? stage l)))
+                   (conj R l)
+                   (recur (move angle power 1.0 l)
+                          (conj R (move angle power 1.0 l)))))]
     stable))
