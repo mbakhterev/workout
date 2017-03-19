@@ -35,11 +35,22 @@
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell) 
 
+(def ^:private ^:const stages (detect-stages i-lander l-shell l-pad r-shell))
+
 (r/update-scene :traces (list {:trace (take-while (partial alive? shell)
-                                                  (reductions (wrap 1.0 move)
-                                                              i-lander (repeat [90 4])))
+                                                  (reductions (wrap 1.0 move) i-lander (repeat [90 4])))
                                :mark \D}
 
-                              {:trace (integrate-hover (first (detect-stages i-lander
-                                                                             l-shell l-pad r-shell))
-                                                       i-lander 90 0)}))
+                              {:trace (list (nth (solve-hover i-lander ((comp :bx :section) (first stages))) 1))}
+                              
+                              {:trace (take-while (partial alive? shell)
+                                                  (reductions (wrap 1.0 move) (assoc i-lander :vx 0 :angle 90 :power 4)
+                                                              (repeat [90 4])))}))
+
+(identity i-lander)
+
+(take-while (partial alive? shell)
+            (reductions (wrap 1.0 move) (assoc i-lander :vx 0 :angle 90 :power 4)
+                        (repeat [90 4])))
+
+(solve-hover (assoc i-lander :vx 0 :angle 90 :power 4) 1000.0)

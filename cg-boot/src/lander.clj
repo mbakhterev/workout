@@ -43,6 +43,9 @@
 (defn control-match? [angle power l] (and (= (:angle l) angle)
                                           (= (:power l) power)))
 
+(defn- x-acceleration [angle power] (* power (x-power angle)))
+(defn- y-acceleration [angle power] (- (* power (y-power angle)) M))
+
 (defn move [control-angle control-power t l]
   (let [m (control-match? control-angle control-power l)]
     (if (and (not= 1.0 t) (not m))
@@ -55,8 +58,8 @@
         vx    (:vx l)
         vy    (:vy l)
         fuel  (:fuel l)
-        ax    (* power (x-power angle))
-        ay    (- (* power (y-power angle)) M)]
+        ax    (x-acceleration angle power)
+        ay    (y-acceleration angle power)]
     (->Lander (+ x (* vx t) (* 0.5 ax t t))
               (+ y (* vy t) (* 0.5 ay t t))
               (+ vx (* ax t))
@@ -177,14 +180,19 @@
          (add-hover-stages x ax bx l-rock r-rock)
          (add-reverse-stage x vx ax bx))))
 
-(defn- solve-square-equation [a b c]
-  (let [D (- (* b b) (* 4 a c))]
-    (if (< D 0.0)
-      [:ko 0.0 0.0]
-      (let [D-sqrt (Math/sqrt D)
-            a-rcpr (/ (* 2.0 a))]
-        [:ok (* (+ (- b) D-sqrt) a-rcpr)
-             (* (- (- b) D-sqrt) a-rcpr)]))))
+(defn solve-square-equation [a b c]
+  (if (= 0.0 a)
+    (if (= 0.0 b)
+      [false 0.0 0.0] (let [x (/ (- c) b)] [true x x]))
+    
+    (let [D (- (* b b) (* 4 a c))]
+      (if (< D 0.0)
+        [false 0.0 0.0]
+        (let [D-sqrt (Math/sqrt D)
+              a-rcpr (/ (* 2.0 a))
+              tp     (* (+ (- b) D-sqrt) a-rcpr)
+              tm     (* (- (- b) D-sqrt) a-rcpr)]
+          [true (min tp tm) (max tp tm)])))))
 
 (defn- hover? [stage l]
   (let [x  (:x l)
@@ -200,7 +208,18 @@
          (<= 0 x x-max)
          (<= 0 y y-max))))
 
-(defn- solve-hover [x vx h vy xe])
+(defn solve-hover [l target-x]
+  (let [x          (:x l)
+        vx         (:vx l)   
+        angle      (:angle l)
+        power      (:power l)
+        ax         (x-acceleration angle power)
+        [ok tl tr] (solve-square-equation (* 0.5 ax) vx (- x target-x))]
+    (println ax vx (- x target-x) ok tl tr)
+    (let [tta (and ok (if (<= 0.0 tl tr) tl (if (<= 0.0 tr) tr)))]
+      (println tta)
+      (if tta [true (move angle power tta l) tta]
+              [false nil 0.0]))))
 
 (defn integrate-hover [stage lander angle power]
   (let [stable (loop [l lander R (vector)]

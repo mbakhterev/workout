@@ -45,7 +45,13 @@
               (:power l)))
 
 (defn- correct-trace [t]
-  (assoc t :trace (map correct-lander (:trace t))))
+  (let [L (:trace t)
+        l (last L)
+        m (:mark t)]
+    (assoc t
+           :trace (map correct-lander L)
+           :mark  (str (apply format "%.3f|%.3f|%d|%d" ((juxt :vx :vy :angle :power) l))
+                       (if m (format "|%s" (str m)))))))
 
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag
@@ -133,9 +139,7 @@
               (doseq [l (:trace t)] (draw-lander l))
               (let [l (last (:trace t))
                     m (:mark t)]
-                (q/text (str (apply format "%.3f|%.3f|%d|%d" ((juxt :vx :vy :angle :power) l))
-                             (if m (format "|%s" (str (:mark t)))))
-                        (+ (:x l) 5) (- (:y l) 5))))))))
+                (q/text m (+ (:x l) 5) (+ (:y l) 5))))))))
   
   (swap! scene assoc :redraw false)) 
 
