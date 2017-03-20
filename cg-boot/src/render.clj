@@ -110,7 +110,7 @@
 (defn- draw []
   (let [sc (deref scene)]
     (if (:redraw sc)
-      (comment (println "redrawing"))
+      (println "redrawing")
       (do (q/background 255)
           (if-let [surface (:surface sc)]
             (do (q/stroke 127)

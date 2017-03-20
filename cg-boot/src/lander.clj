@@ -126,17 +126,17 @@
         ay (- 4.0 M)
         t  (/ (- ve vy) ay)]
     (if (< t 0)
-      [:ko 0.0 t]
-      [:ok (+ (* vy t) (* 0.5 ay ay t)) t])))
+      [true 0.0 t]
+      [false (+ (* vy t) (* 0.5 ay ay t)) t])))
 
 (defn- braking-constraint-core [x vx ax vy]
   (let [t  (/ (- vx) ax)
         ay (- M)]
     (if (< t 0)
-      [:ko 0.0 0.0 t]
-      [:ok (+ (* vy t) (* 0.5 ay ay t))
-           (+ (* vx t) (* 0.5 ay ay t))
-           t]))) 
+      [true 0.0 0.0 t]
+      [false (+ (* vy t) (* 0.5 ay ay t))
+             (+ (* vx t) (* 0.5 ay ay t))
+             t]))) 
 
 (defn braking-constraint-h-dx [l landing-pad]
   (let [x  (:x l)
@@ -147,6 +147,8 @@
     (cond (< x ax) (braking-constraint-core x vx -4.0 vy)
           (> x bx) (braking-constraint-core x vx +4.0 vy)
           :else    (braking-constraint-core x vx (if (>= vx 0.0) -4.0 +4.0) vy))))
+
+(defn- )
 
 (defn- add-braking-stage [x vx ax bx stage]
   (if (and (= 0 vx) (< ax x bx)) stage (cons {:stage :braking} stage)))
@@ -180,7 +182,7 @@
          (add-hover-stages x ax bx l-rock r-rock)
          (add-reverse-stage x vx ax bx))))
 
-(defn solve-square-equation [a b c]
+(defn- solve-square-equation [a b c]
   (if (= 0.0 a)
     (if (= 0.0 b)
       [false 0.0 0.0] (let [x (/ (- c) b)] [true x x]))
@@ -215,13 +217,24 @@
         power      (:power l)
         ax         (x-acceleration angle power)
         [ok tl tr] (solve-square-equation (* 0.5 ax) vx (- x target-x))]
-    (println ax vx (- x target-x) ok tl tr)
-    (let [tta (and ok (if (<= 0.0 tl tr) tl (if (<= 0.0 tr) tr)))]
-      (println tta)
-      (if tta [true (move angle power tta l) tta]
-              [false nil 0.0]))))
+    (if-let [tta (and ok (if (<= 0.0 tl tr) tl (if (<= 0.0 tr) tr)))]
+      [true (move angle power tta l) tta]
+      [false nil 0.0])))
 
-(defn integrate-hover [stage lander angle power]
+; Здесь проблема с модулями, которые не успевают стабилизировать свой контроль
+; до границы отрезка. Чтобы точно их моделировать, надо внести поправку перед
+; solve-рассчётом в угол и мощность. Кроме этого, для проверки надо накопить
+; общее время полёта. Чтобы не порождать дополнительные траектории разумно
+; запоминать уже пройденные. Структура отображения (экспериментальный синтаксис)
+;
+;   (type -> (tuple angle power) (tuple lander time))
+;
+; После этого надо проанализировать lander на ограничения, и вернуть позицию во
+; время (ceiling time). (move a p (ceiling time) l) будет в области действия
+; следующего сегмента, поэтому необходимо предварительно проверить входящие
+; точки на ограничения. По высоте и скорости тоже.
+
+(defn integrate-hover [stage lander traces angle power]
   (let [stable (loop [l lander R (vector)]
                  (if (or (control-match? angle power l)
                          (not (hover? stage l)))
@@ -229,3 +242,10 @@
                    (recur (move angle power 1.0 l)
                           (conj R (move angle power 1.0 l)))))]
     stable))
+
+; Это общая схема, которая может пригодится для разных стадий
+
+(defn- integrate-wrap [f stage lander]
+  (fn [traces [angle power]] (f stage lander angle power)))
+
+
