@@ -73,16 +73,20 @@
 (def ^:private ^:const x-max (- 7000.0 1.0))
 (def ^:private ^:const y-max (- 3000.0 1.0))
 
+(defn- over-section? [l s]
+  (let [x (:x l)
+        y (:y l)]
+    (and (<= (:ax s) x (:bx s))
+         (let [rx (- x (:ax s))
+               ry (- y (:ay s))]
+           (<= ry (* (:k s) rx))))))
+
 (defn alive? [surface l]
   (let [x (:x l)
         y (:y l)]
     (and (<= 0 x x-max)
          (<= 0 y y-max)
-         (not (some (fn [s] (and (<= (:ax s) x (:bx s))
-                                 (let [rx (- x (:ax s))
-                                       ry (- y (:ay s))]
-                                   (<= ry (* (:k s) rx)))))
-                    surface)))))
+         (not (some (partial over-section? l) surface)))))
 
 (defn- gen-cloud [base cloud array-convert]
   (let [A (first base)
@@ -117,8 +121,12 @@
 (def ^:private ^:const h-constraint-reserve 0.125)
 (def ^:private ^:const dx-constraint-reserve 0.125)
 
+(defn- reserve [x r] (+ x (* x r)))
+
 ; Вычисляем разницу высот, на которой можем погасить vy, полагая, что управление
-; уже (vec 0 4). Вычисления в обычной системе координат: Марс внизу 
+; уже (vec 0 4). Вычисления в обычной системе координат: Марс внизу. Если
+; скорость такая, что гасить её не надо, нас это устраивает и мы отвечаем, что
+; не нужна высота и время на сжигание топлива.
 
 (defn- descending-constraint-h [l]
   (let [vy (:vy l)
@@ -126,17 +134,17 @@
         ay (- 4.0 M)
         t  (/ (- ve vy) ay)]
     (if (< t 0)
-      [true 0.0 t]
-      [false (+ (* vy t) (* 0.5 ay ay t)) t])))
+      [true 0.0 0.0]
+      [true (+ (* vy t) (* 0.5 ay ay t)) t])))
 
 (defn- braking-constraint-core [x vx ax vy]
   (let [t  (/ (- vx) ax)
         ay (- M)]
     (if (< t 0)
-      [true 0.0 0.0 t]
-      [false (+ (* vy t) (* 0.5 ay ay t))
-             (+ (* vx t) (* 0.5 ay ay t))
-             t]))) 
+      [false 0.0 0.0 t]
+      [true (+ (* vy t) (* 0.5 ay ay t))
+            (+ (* vx t) (* 0.5 ay ay t))
+            t]))) 
 
 (defn braking-constraint-h-dx [l landing-pad]
   (let [x  (:x l)
@@ -148,7 +156,24 @@
           (> x bx) (braking-constraint-core x vx +4.0 vy)
           :else    (braking-constraint-core x vx (if (>= vx 0.0) -4.0 +4.0) vy))))
 
-(defn- )
+(defn constraint [l landing-pad]
+  (let [[descend-ok descend-h descend-t :as c-descend] (descending-constraint-h l)
+        [brake-ok brake-h brake-dx brake-t :as c-break] (braking-constraint-h-dx l landing-pad)
+        ax (:ax landing-pad)
+        bx (:bx landing-pad)
+        ay (:ay landing-pad)
+        x  (:x l)
+        vx (:vx l)
+        h  (:y l)
+        dx (cond (< x ax)   (- bx x)
+                 (< bx x)   (- ax x)
+                 (> 0.0 vx) (- bx x)
+                 :else      (- ax x))]
+    (and brake-ok 
+         descend-ok
+         (>= dx (+ x (reserve brake-dx dx-constraint-reserve)))
+         (<= ay (+ h (reserve (+ brake-h descend-h) h-constraint-reserve)))
+         (<= (* 4.0 (+ descend-t brake-t)) (:fuel l)))))
 
 (defn- add-braking-stage [x vx ax bx stage]
   (if (and (= 0 vx) (< ax x bx)) stage (cons {:stage :braking} stage)))
