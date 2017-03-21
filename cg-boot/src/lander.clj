@@ -257,15 +257,26 @@
 ; После этого надо проанализировать lander на ограничения, и вернуть позицию во
 ; время (ceiling time). (move a p (ceiling time) l) будет в области действия
 ; следующего сегмента, поэтому необходимо предварительно проверить входящие
-; точки на ограничения. По высоте и скорости тоже.
+; точки на ограничения. По высоте и скорости тоже. Но, видимо, их разумнее
+; отфильтровать в другом месте
+
+; FIXME: проверки на точные равенства - потенциальный источник больших проблем.
+; Но пока работа над общей схемой.
+
+(defn- approach-loop [lander section angle power]
+  (let [ax (:ax section)
+        bx (:bx section)]
+    (loop [l-prev lander]
+      (let (l (move angle power 1.0 l-prev))
+        (cond (<= ax (:x l) bx)              [:out l-prev]
+              (over-section? l section)      [:ko l-prev] 
+              (control-match? angle power l) [:ok l]
+              :else                          (recur l))))))
 
 (defn integrate-hover [stage lander traces angle power]
-  (let [stable (loop [l lander R (vector)]
-                 (if (or (control-match? angle power l)
-                         (not (hover? stage l)))
-                   (conj R l)
-                   (recur (move angle power 1.0 l)
-                          (conj R (move angle power 1.0 l)))))]
+  (let [s (:section stage)
+        [l1 state] (loop [l lander] (cond (<= (:ax s) (:x l) (:bx s)) )
+                 )]
     stable))
 
 ; Это общая схема, которая может пригодится для разных стадий
