@@ -180,11 +180,11 @@
 
 (defn- add-hover-stages [x ax bx l-rock r-rock stage] 
   (let [on-left (fn [s] (if (< x (:bx s) bx) {:stage :hover
-                                              :direction :left
+                                              :direction :right
                                               :section s}))
 
         on-right (fn [s] (if (> x (:ax s) ax) {:stage :hover
-                                               :direction :right
+                                               :direction :left
                                                :section s}))]
 
     (concat (cond (< x ax) (keep on-left l-rock)
@@ -252,7 +252,7 @@
 ; общее время полёта. Чтобы не порождать дополнительные траектории разумно
 ; запоминать уже пройденные. Структура отображения (экспериментальный синтаксис)
 ;
-;   (type -> (tuple angle power) (tuple lander time))
+;   (type -> (tuple angle power) (tuple ok lander time))
 ;
 ; После этого надо проанализировать lander на ограничения, и вернуть позицию во
 ; время (ceiling time). (move a p (ceiling time) l) будет в области действия
@@ -266,18 +266,30 @@
 (defn- approach-loop [lander section angle power]
   (let [ax (:ax section)
         bx (:bx section)]
-    (loop [l-prev lander]
-      (let (l (move angle power 1.0 l-prev))
-        (cond (<= ax (:x l) bx)              [:out l-prev]
-              (over-section? l section)      [:ko l-prev] 
-              (control-match? angle power l) [:ok l]
-              :else                          (recur l))))))
+    (loop [l-prev lander t 0.0]
+      (let [l (move angle power 1.0 l-prev)]
+        (cond (<= ax (:x l) bx)              [:out l-prev t]
+              (over-section? l section)      [:ko l-prev t] 
+              (control-match? angle power l) [:ok l t]
+              :else                          (recur l (+ 1.0 t)))))))
+
+(defn- trace-hover [traces target-x lander]
+  (if (traces [(:angle lander) (:power lander)])
+    traces
+    (let [[ok l tta] (slove-hover l target-x)]
+      (constraint)
+      )
+    )
+  )
 
 (defn integrate-hover [stage lander traces angle power]
-  (let [s (:section stage)
-        [l1 state] (loop [l lander] (cond (<= (:ax s) (:x l) (:bx s)) )
-                 )]
-    stable))
+  (let [S (:section stage)
+        target-x (if (= :right (:direction stage)) (:bx S) (:ax S))
+        [state lA t] (approach-loop lander S angle power)]
+    (case state
+      :ko  traces
+      :ok  (trace-hover traces angle power target-x lA)
+      :out nil)))
 
 ; Это общая схема, которая может пригодится для разных стадий
 

@@ -1,0 +1,25 @@
+(defn- approach-loop [lander section angle power]
+  (let [ax (:ax section)
+        bx (:bx section)]
+    (loop [l-prev lander]
+      (let (l (move angle power 1.0 l-prev))
+        (cond (<= ax (:x l) bx)              [:out l-prev]
+              (over-section? l section)      [:ko l-prev] 
+              (control-match? angle power l) [:ok l]
+              :else                          (recur l))))))
+
+В неком гипотетическом ride это могло бы выглядеть так:
+
+(let approach-loop
+  (lambda (lander section angle power)
+    (let ax (:ax section)
+         bx (:bx section)
+         loop (lambda (l-prev)
+                (let l (move angle power 1.0 l-prev))
+                (cond (<= ax (:x l) bx)         (tuple :out l-prev)
+                      (over-section? l section  (tuple :ko l-prev)
+                      :else                     (loop l))))
+      (loop lander))))
+
+Мысль тут такая, что для ride let - это некая внутренняя конструкция. Потому что
+мы пытаемся параллельно назначать множества переменных. Надо думать, в общем
