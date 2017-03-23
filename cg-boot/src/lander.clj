@@ -6,9 +6,9 @@
                    ^double y
                    ^double vx
                    ^double vy
-                     ^long fuel
-                     ^long angle
-                     ^long power])
+                   ^long fuel
+                   ^long angle
+                   ^long power])
 
 ; Синусы и косинусы для рассчёта проекции тяги. Угол задаётся от оси (+ PI/2).
 ; Симметричность cos не учитывается, чтобы не усложнять формулу пересчёта угла phi
@@ -40,19 +40,20 @@
           (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
           (< 0 delta) (if (< delta max-delta) goal (- current max-delta)))))
 
-(defn control-match? [angle power ^lander.Lander {la :angle lp :power}]
-  (and (= la angle) (= lp power)))
+(defn control-match? [angle power ^lander.Lander {a :angle p :power}]
+  (and (= a angle) (= p power)))
 
 (defn- x-acceleration [angle power] (* power (x-power angle)))
 (defn- y-acceleration [angle power] (- (* power (y-power angle)) M))
 
-(defn move [control-angle control-power t ^lander.Lander {x    :x
-                                                          y    :y
-                                                          vx   :vx
-                                                          vy   :vy
-                                                          fuel :fuel :as l}]
+(defn move [control-angle control-power t ^lander.Lander {x :x y :y vx :vx vy :vy fuel :fuel :as l}] 
+  (comment (println "moving lander:" l))
   (let [m (control-match? control-angle control-power l)]
-    (if-not (or (= 1.0 t) m) (throw (Exception. (format "cannot move that: %.3f %b" t m)))))
+    (if-not (or m (= 1.0 t))
+      (throw (Exception. (format "cannot move that: %.3f %b. ctl: %d %d. lnd: %d %d"
+                                 t m
+                                 control-angle control-power
+                                 (:angle l) (:power l))))))
 
   (let [angle (control-to (:angle l) control-angle (* t angle-max-delta))
         power (control-to (:power l) control-power (* t power-max-delta))
@@ -71,8 +72,7 @@
 (def ^:private ^:const x-max (- 7000.0 1.0))
 (def ^:private ^:const y-max (- 3000.0 1.0))
 
-(defn- over-section? [^lander.Lander {x :x y :y}
-                      ^geometry.Section {ax :ax bx :bx ay :ay k :k}]
+(defn- over-section? [^lander.Lander {x :x y :y} ^geometry.Section {ax :ax bx :bx ay :ay k :k}]
   (and (<= ax x bx)
        (let [rx (- x ax)
              ry (- y ay)] (<= ry (* k rx)))))
@@ -122,7 +122,7 @@
 ; скорость такая, что гасить её не надо, нас это устраивает и мы отвечаем, что
 ; не нужна высота и время на сжигание топлива.
 
-(defn- descending-constraint-h [^lander.Lander {vy :vy}]
+(defn descending-constraint-h [^lander.Lander {vy :vy}]
   (let [ve (- max-vy)
         ay (- 4.0 M)
         t  (/ (- ve vy) ay)]
@@ -147,15 +147,16 @@
 
 (defn constraint [^lander.Lander {x :x vx :vx h :y fuel :fuel :as l}
                   ^geometry.Section {ax :ax bx :bx ay :ay :as landing-pad}]
-  (let [[descend-ok descend-h descend-t] (descending-constraint-h l)
-        [brake-ok brake-h brake-dx brake-t] (braking-constraint-h-dx l landing-pad)
+  (let [[descend-ok descend-h descend-t :as dc] (descending-constraint-h l)
+        [brake-ok brake-h brake-dx brake-t :as bc] (braking-constraint-h-dx l landing-pad)
         dx (cond (< x ax)   (- bx x)
                  (< bx x)   (- ax x)
                  (> 0.0 vx) (- bx x)
                  :else      (- ax x))]
+    (comment (println "dc:" dc "bc:" bc "dx:" dx))
     (and brake-ok 
          descend-ok
-         (>= dx (+ x (reserve brake-dx dx-constraint-reserve)))
+         (>= dx (reserve brake-dx dx-constraint-reserve))
          (<= ay (+ h (reserve (+ brake-h descend-h) h-constraint-reserve)))
          (<= (* 4.0 (+ descend-t brake-t)) fuel))))
 
@@ -181,10 +182,7 @@
     (cons {:stage :reverse} stage)
     stage))
 
-(defn detect-stages [^lander.Lander {x :x vx :vx}
-                     l-rock
-                     ^geometry.Section {ax :ax bx :bx}
-                     r-rock]
+(defn detect-stages [^lander.Lander {x :x vx :vx} l-rock ^geometry.Section {ax :ax bx :bx} r-rock]
   (->> (list {:stage :descending})
        (add-braking-stage x vx ax bx)
        (add-hover-stages x ax bx l-rock r-rock)
@@ -203,8 +201,8 @@
               tm     (* (- (- b) D-sqrt) a-rcpr)]
           [true (min tp tm) (max tp tm)])))))
 
-(defn- hover? [{^geometry.Section {ax :ax bx :bx ay :ay by :by k :k} :section}
-               ^lander.Lander {x :x y :y}]
+(defn- hover?
+  [{^geometry.Section {ax :ax bx :bx ay :ay by :by k :k} :section} ^lander.Lander {x :x y :y}]
   (and (<= ax x bx)
        (> (- y ay) (* k (- x ax)))
        (<= 0 x x-max)
@@ -234,16 +232,14 @@
 ; FIXME: проверки на точные равенства - потенциальный источник больших проблем.
 ; Но пока работа над общей схемой.
 
-(defn- approach-loop [^lander.Lander lander
-                      ^geometry.Section {ax :ax bx :bx :as section}
-                      angle
-                      power]
-  (loop [l-prev lander t 0.0]
-    (let [l (move angle power 1.0 l-prev)]
-      (cond (not (<= ax (:x l) bx))        [:out l-prev t]
-            (over-section? l section)      [:ko l-prev t] 
-            (control-match? angle power l) [:ok l t]
-            :else                          (recur l (+ 1.0 t))))))
+(defn- approach-loop [^lander.Lander lander ^geometry.Section {ax :ax bx :bx :as section} angle power]
+  (loop [l lander t 0.0]
+    (if (control-match? angle power l)
+      [:ok l t]
+      (let [l-next (move angle power 1.0 l)]
+        (cond (not (<= ax (:x l-next) bx))   [:out l t]
+              (over-section? l-next section) [:ko l t] 
+              :else                          (recur l-next (+ 1.0 t)))))))
 
 (defn- trace-hover [^geometry.Section landing-pad
                     traces
@@ -253,12 +249,12 @@
   (if (traces [angle power])
     traces
     (let [[ok l tta] (solve-hover lander target-x)]
-      (println l (constraint l landing-pad))
+      (comment (println l (constraint l landing-pad)))
       (if-not (and ok (constraint l landing-pad))
         traces
         (let [t-int     (Math/ceil tta)
               t-overall (+ t t-int)]
-          (assoc traces [angle power] [true (move angle power t-overall t-int) t-overall])))))) 
+          (assoc traces [angle power] [true (move angle power t-int lander) t-overall])))))) 
 
 (defn integrate-hover [^geometry.Section landing-pad
                        {direction :direction ^geometry.Section {bx :bx ax :ax :as S} :section}
@@ -266,9 +262,10 @@
                        traces
                        angle
                        power]
+  (comment (println angle power))
   (let [target-x (if (= :right direction) bx ax)
         [state lA t] (approach-loop lander S angle power)]
-    (println state target-x lA t)
+    (comment (println state target-x lA t))
     (case state
       :ko  traces
       :ok  (trace-hover landing-pad traces target-x lA t)
@@ -277,5 +274,5 @@
 
 ; Это общая схема, которая может пригодится для разных стадий
 
-(defn- integrate-wrap [f landing-pad stage lander]
-  (fn [traces [angle power]] (f landing-pad stage lander angle power)))
+(defn integrate-wrap [f landing-pad stage lander]
+  (fn [traces [angle power]] (f landing-pad stage lander traces angle power)))

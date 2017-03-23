@@ -46,10 +46,24 @@
                                  {:trace (trace-control (assoc i-lander :vx 0 :angle 90 :power 4) 90 4)}))
                   (for [p (range 4) a (range -90 91 5)] {:trace (trace-control i-lander a p)})))
 
-(constraint (move 15 0 1.0 i-lander) l-pad)
+(constraint (move -90 0 4.0 i-lander) l-pad)
 
 (time (count (for [p (range 4) a (range -90 91 5)] {:trace (trace-control i-lander a p)})))
 
-(integrate-hover l-pad (first stages) i-lander {} 0 4)
+(integrate-hover l-pad (first stages) i-lander {} 90 0)
 
-(identity i-lander)
+(def ^:private ^:const t-lander
+  #lander.Lander{:x 1000.0000000000005, :y 2672.0009667677978,
+                 :vx 108.45640052594703, :vy -8.201858107192168,
+                 :fuel 786, :angle -30, :power 4})
+
+(constraint t-lander l-pad)
+
+(braking-constraint-h-dx t-lander l-pad)
+(descending-constraint-h (assoc t-lander :vy -48))
+(identity l-pad)
+
+(map identity (reduce (integrate-wrap integrate-hover l-pad (first stages) i-lander) {}
+        (for [a (range -90 91 5) p (range 5)] [a p])))
+
+(count (for [a (range -90 91) p (range 5)] [a p]))
