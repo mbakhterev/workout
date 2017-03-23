@@ -49,3 +49,7 @@
 (constraint i-lander l-pad)
 
 (time (count (for [p (range 4) a (range -90 91 5)] {:trace (trace-control i-lander a p)})))
+
+(integrate-hover l-pad (first stages) i-lander {} -90 0)
+
+(identity i-lander)

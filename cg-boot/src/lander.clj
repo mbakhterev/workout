@@ -273,27 +273,27 @@
               (control-match? angle power l) [:ok l t]
               :else                          (recur l (+ 1.0 t)))))))
 
-(defn- trace-hover [traces target-x lander]
-  (if (traces [(:angle lander) (:power lander)])
+(defn- trace-hover [landing-pad traces target-x {angle :angle power :power :as lander} t]
+  (if (traces [angle power])
     traces
-    (let [[ok l tta] (slove-hover l target-x)]
-      (constraint)
-      )
-    )
-  )
+    (let [[ok l tta] (solve-hover lander target-x)]
+      (if-not (and ok (constraint l landing-pad))
+        traces
+        (let [t-overall (Math/ceil (+ t tta))]
+          (assoc traces [angle power] [true (move angle power t-overall lander) t-overall])))))) 
 
-(defn integrate-hover [stage lander traces angle power]
+(defn integrate-hover [landing-pad stage lander traces angle power]
   (let [S (:section stage)
         target-x (if (= :right (:direction stage)) (:bx S) (:ax S))
         [state lA t] (approach-loop lander S angle power)]
+    (println state)
     (case state
       :ko  traces
-      :ok  (trace-hover traces angle power target-x lA)
-      :out nil)))
+      :ok  (trace-hover landing-pad traces target-x lA t)
+      :out (let [lC (assoc lA :angle (:angle lA) :power (:power lA))]
+             (trace-hover landing-pad traces target-x lC t)))))
 
 ; Это общая схема, которая может пригодится для разных стадий
 
-(defn- integrate-wrap [f stage lander]
-  (fn [traces [angle power]] (f stage lander angle power)))
-
-
+(defn- integrate-wrap [f landing-pad stage lander]
+  (fn [traces [angle power]] (f landing-pad stage lander angle power)))
