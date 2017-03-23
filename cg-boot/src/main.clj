@@ -46,10 +46,10 @@
                                  {:trace (trace-control (assoc i-lander :vx 0 :angle 90 :power 4) 90 4)}))
                   (for [p (range 4) a (range -90 91 5)] {:trace (trace-control i-lander a p)})))
 
-(constraint i-lander l-pad)
+(constraint (move 15 0 1.0 i-lander) l-pad)
 
 (time (count (for [p (range 4) a (range -90 91 5)] {:trace (trace-control i-lander a p)})))
 
-(integrate-hover l-pad (first stages) i-lander {} -90 0)
+(integrate-hover l-pad (first stages) i-lander {} 0 4)
 
 (identity i-lander)

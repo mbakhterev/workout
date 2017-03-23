@@ -253,10 +253,12 @@
   (if (traces [angle power])
     traces
     (let [[ok l tta] (solve-hover lander target-x)]
+      (println l (constraint l landing-pad))
       (if-not (and ok (constraint l landing-pad))
         traces
-        (let [t-overall (Math/ceil (+ t tta))]
-          (assoc traces [angle power] [true (move angle power t-overall lander) t-overall])))))) 
+        (let [t-int     (Math/ceil tta)
+              t-overall (+ t t-int)]
+          (assoc traces [angle power] [true (move angle power t-overall t-int) t-overall])))))) 
 
 (defn integrate-hover [^geometry.Section landing-pad
                        {direction :direction ^geometry.Section {bx :bx ax :ax :as S} :section}
@@ -266,7 +268,7 @@
                        power]
   (let [target-x (if (= :right direction) bx ax)
         [state lA t] (approach-loop lander S angle power)]
-    (println state)
+    (println state target-x lA t)
     (case state
       :ko  traces
       :ok  (trace-hover landing-pad traces target-x lA t)
