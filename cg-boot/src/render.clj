@@ -44,14 +44,10 @@
               (:angle l)
               (:power l)))
 
-(defn- correct-trace [t]
-  (let [L (:trace t)
-        l (last L)
-        m (:mark t)]
-    (assoc t
-           :trace (map correct-lander L)
-           :mark  (str (apply format "%.3f|%.3f|%d|%d" ((juxt :vx :vy :angle :power) l))
-                       (if m (format "|%s" (str m)))))))
+(defn- correct-trace [L]
+  (let [l (last L)]
+    {:trace (map correct-lander L)
+     :mark  (str (apply format "%.3f|%.3f|%d|%d" ((juxt :vx :vy :angle :power) l)))}))
 
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag

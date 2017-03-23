@@ -40,11 +40,7 @@
 (defn- trace-control [l angle power]
   (take-while (partial alive? shell) (reductions (wrap 1.0 move) l (repeat [angle power]))))
 
-(r/update-scene
-  :traces (concat (comment (list {:trace (trace-control i-lander 90 4) :mark \D}
-                                 {:trace (list (nth (solve-hover i-lander ((comp :bx :section) (first stages))) 1))}
-                                 {:trace (trace-control (assoc i-lander :vx 0 :angle 90 :power 4) 90 4)}))
-                  (for [p (range 4) a (range -90 91 5)] {:trace (trace-control i-lander a p)})))
+(r/update-scene :traces (concat (for [p (range 4) a (range -90 91 5)] (trace-control i-lander a p))))
 
 (constraint (move -90 0 4.0 i-lander) l-pad)
 
