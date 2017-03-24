@@ -15,7 +15,7 @@
                   ^boolean left?
                   ^geometry.Section section 
                   ^geometry.Section pad
-                  ^double x-section
+                  ^double x-goal
                   ^double x-pad
                   ^double y-pad
                   surface])
@@ -73,7 +73,7 @@
               (- fuel (* power t))
               nc)))
 
-(defn wrap [f t] (fn [^Lander l ^Control c] (f c t l)))
+(defn wrap [f t] (fn [^Lander l [angle power]] (f (->Control angle power) t l)))
 
 (def ^:private ^:const x-max (- 7000.0 1.0))
 (def ^:private ^:const y-max (- 3000.0 1.0))
@@ -111,7 +111,7 @@
       [true (+ (* vy t) (* 0.5 ay ay t)) t])))
 
 (defn- braking-constraint-h-dx [^Lander {vx :vx vy :vy} ^Stage {left? :left?}]
-  (let [ax (if left? +4.0 -4.0)
+  (let [ax (if left? -4.0 +4.0)
         t  (/ (- vx) ax)
         ay (- M)]
      (if (< t 0)
@@ -134,7 +134,7 @@
                           ^geometry.Section {ax :ax ay :ay bx :bx :as pad} stages]
   (if (and (= 0 vx) (<= ax x bx))
     stages
-    (let [left? (or (> x bx) (> 0.0 vx))
+    (let [left? (or (< x ax) (< 0.0 vx))
           xp (if left? bx ax)]
       (cons (->Stage :braking left? pad pad xp xp ay nil) stages))))
 
@@ -149,16 +149,28 @@
 (defn- add-reverse-stage [^Lander {x :x vx :vx}
                           ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
                           l-rock r-rock stages]
-  (if (or (and (< x ax) (< vx 0.0))
-          (and (> x bx) (> vx 0.0)))
-    (cons {:stage :reverse} stage)
-    stage))
+  (if-not (or (and (< x ax) (< vx 0.0))
+              (and (> x bx) (> vx 0.0)))
+    stages
+    (let [left? (< x ax)
+          rock (if left? l-rock r-rock)
+          s (first (filter (fn [s] (<= (:ax s) s (:bx s))) rock))
+          surface (if left?
+                    (take-while (fn [s] (<= (:ax s) x)) rock)
+                    (drop-while (fn [s] (<= (:bx s) x)) rock))]
+      (cons (->Stage :reverse left? s pad (if left? (:bx s) (:ax s)) (if left? bx ax) ay surface)
+            stages))))
+
+(defn- descend-stage [^lander.Lander {x :x} ^geometry.Section {ax :ax ay :ay bx :bx :as pad}]
+  (let [left? (< x ax)
+        xp (if left? bx ax)]
+    (list (->Stage :descending left? pad pad xp xp ay nil))))
 
 (defn detect-stages [^lander.Lander l l-rock ^geometry.Section pad r-rock]
-  (->> (list {:stage :descending})
+  (->> (descend-stage l pad)
        (add-braking-stage l pad)
        (add-hover-stages l pad l-rock r-rock)
-       (add-reverse-stage l pad)))
+       (add-reverse-stage l pad l-rock r-rock)))
 
 (defn- solve-square-equation [a b c]
   (if (= 0.0 a)
@@ -173,10 +185,10 @@
               tm     (* (- (- b) D-sqrt) a-rcpr)]
           [true (min tp tm) (max tp tm)])))))
 
-(defn solve-hover
-  [^lander.Lander {x :x vx :vx ^lander.Control {a :angle p :power :as lc} :control :as l} target-x]
+(defn solve-hover [^Lander {x :x vx :vx ^lander.Control {a :angle p :power :as lc} :control :as l}
+                   ^Stage {x-target :x-goal}]
   (let [ax (x-acceleration a p)
-        [ok tl tr] (solve-square-equation (* 0.5 ax) vx (- x target-x))]
+        [ok tl tr] (solve-square-equation (* 0.5 ax) vx (- x x-target))]
     (if-let [tta (and ok (if (<= 0.0 tl tr) tl (if (<= 0.0 tr) tr)))]
       [true (move lc tta l) tta]
       [false nil 0.0])))
@@ -198,8 +210,9 @@
 ; FIXME: проверки на точные равенства - потенциальный источник больших проблем.
 ; Но пока работа над общей схемой.
 
-(defn- approach-loop
-  [^lander.Lander lander ^geometry.Section {ax :ax bx :bx :as section} ^lander.Control ctl]
+(defn- approach-loop [^Lander lander
+                      ^Stage {{ax :ax bx :bx :as section} :section}
+                      ^lander.Control ctl]
   (loop [l lander t 0.0]
     (if (= ctl (:control l))
       [:ok l t]
@@ -208,38 +221,31 @@
               (over-section? l-next section) [:ko l t] 
               :else                          (recur l-next (+ 1.0 t)))))))
 
-(defn- trace-hover [^geometry.Section landing-pad
-                    traces
-                    target-x
-                    ^lander.Lander {angle :angle power :power :as lander}
-                    t]
-  (if (traces [angle power])
+(defn- trace-hover [traces ^Stage stage ^lander.Lander {ctl :control :as lander} t]
+  (if (traces ctl)
     traces
-    (let [[ok l tta] (solve-hover lander target-x)]
-      (comment (println l (constraint l landing-pad)))
-      (if-not (and ok (constraint l landing-pad))
+    (let [[ok l tta] (solve-hover lander stage)]
+      (comment (println l (constraint l stage)))
+      (if-not (and ok (constraint l stage))
         traces
         (let [t-int     (Math/ceil tta)
               t-overall (+ t t-int)]
-          (assoc traces [angle power] [true (move angle power t-int lander) t-overall])))))) 
+          (assoc traces ctl [true (move ctl t-int lander) t-overall])))))) 
 
-(defn integrate-hover [^geometry.Section landing-pad
-                       {direction :direction ^geometry.Section {bx :bx ax :ax :as S} :section}
-                       ^lander.Lander lander
-                       traces
-                       angle
-                       power]
-  (comment (println angle power))
-  (let [target-x (if (= :right direction) bx ax)
-        [state lA t] (approach-loop lander S angle power)]
+(defn integrate-hover [traces
+                       ^Stage stage
+                       ^Lander lander
+                       ^Control ctl]
+  (comment (println ctl))
+  (let [[state lA t] (approach-loop lander stage ctl)]
     (comment (println state target-x lA t))
     (case state
       :ko  traces
-      :ok  (trace-hover landing-pad traces target-x lA t)
-      :out (let [lC (assoc lA :angle (:angle lA) :power (:power lA))]
-             (trace-hover landing-pad traces target-x lC t)))))
+      :ok  (trace-hover traces stage lA t)
+      :out (let [lC (assoc lA :control (control-tune (:control lA) ctl))]
+             (trace-hover traces stage lC t)))))
 
 ; Это общая схема, которая может пригодится для разных стадий
 
-(defn integrate-wrap [f landing-pad stage lander]
-  (fn [traces [angle power]] (f landing-pad stage lander traces angle power)))
+(defn integrate-wrap [f stage lander]
+  (fn [traces [angle power]] (f traces stage lander (->Control angle power))))
