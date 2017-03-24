@@ -2,13 +2,23 @@
 
 (set! *warn-on-reflection* true)
 
+(defrecord Control [^long angle ^long power])
+
 (defrecord Lander [^double x
                    ^double y
                    ^double vx
                    ^double vy
                    ^long fuel
-                   ^long angle
-                   ^long power])
+                   ^Control control])
+
+(defrecord Stage [stage
+                  ^boolean left?
+                  ^geometry.Section section 
+                  ^geometry.Section pad
+                  ^double x-section
+                  ^double x-pad
+                  ^double y-pad
+                  surface])
 
 ; Синусы и косинусы для рассчёта проекции тяги. Угол задаётся от оси (+ PI/2).
 ; Симметричность cos не учитывается, чтобы не усложнять формулу пересчёта угла phi
@@ -40,73 +50,43 @@
           (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
           (< 0 delta) (if (< delta max-delta) goal (- current max-delta)))))
 
-(defn control-match? [angle power ^lander.Lander {a :angle p :power}]
-  (and (= a angle) (= p power)))
+(defn- control-tune [^Control f ^Control t]
+  (->Control (control-to (:angle f) (:angle t) angle-max-delta)
+             (control-to (:power f) (:power t) power-max-delta)))
 
 (defn- x-acceleration [angle power] (* power (x-power angle)))
 (defn- y-acceleration [angle power] (- (* power (y-power angle)) M))
 
-(defn move [control-angle control-power t ^lander.Lander {x :x y :y vx :vx vy :vy fuel :fuel :as l}] 
-  (comment (println "moving lander:" l))
-  (let [m (control-match? control-angle control-power l)]
-    (if-not (or m (= 1.0 t))
+(defn move [^Control tc t ^Lander {lc :control :as l}] 
+  (if-not (or (= 1.0 t) (= tc lc))
       (throw (Exception. (format "cannot move that: %.3f %b. ctl: %d %d. lnd: %d %d"
-                                 t m
-                                 control-angle control-power
-                                 (:angle l) (:power l))))))
+                                 t (= tc lc) (:angle tc) (:power tc) (:angle lc) (:power lc)))))
 
-  (let [angle (control-to (:angle l) control-angle (* t angle-max-delta))
-        power (control-to (:power l) control-power (* t power-max-delta))
-        ax    (x-acceleration angle power)
-        ay    (y-acceleration angle power)]
+  (let [{angle :angle power :power :as nc} (control-tune lc tc)
+        ax (x-acceleration angle power)
+        ay (y-acceleration angle power)
+        {x :x y :y vx :vx vy :vy fuel :fuel} l]
     (->Lander (+ x (* vx t) (* 0.5 ax t t))
               (+ y (* vy t) (* 0.5 ay t t))
               (+ vx (* ax t))
               (+ vy (* ay t))
               (- fuel (* power t))
-              angle
-              power)))
+              nc)))
 
-(defn wrap [t f] (fn [l [a p]] (f a p t l)))
+(defn wrap [f t] (fn [^Lander l ^Control c] (f c t l)))
 
 (def ^:private ^:const x-max (- 7000.0 1.0))
 (def ^:private ^:const y-max (- 3000.0 1.0))
 
-(defn- over-section? [^lander.Lander {x :x y :y} ^geometry.Section {ax :ax bx :bx ay :ay k :k}]
+(defn- over-section? [^Lander {x :x y :y} ^geometry.Section {ax :ax bx :bx ay :ay k :k}]
   (and (<= ax x bx)
        (let [rx (- x ax)
              ry (- y ay)] (<= ry (* k rx)))))
 
-(defn alive? [surface ^lander.Lander {x :x y :y :as l}]
+(defn alive? [surface ^Lander {x :x y :y :as l}]
   (and (<= 0 x x-max)
        (<= 0 y y-max)
        (not (some (partial over-section? l) surface))))
-
-(defn- gen-cloud [base cloud array-convert]
-  (let [A (first base)
-        B (last base)]
-    (->> base
-         (mapv (fn [p] (->> cloud
-                            (map (partial + p))
-                            (filter (fn [i] (<= A i B)))
-                            array-convert
-                            vec))))))
-
-(def ^:private ^:const dA 5)
-(def ^:private ^:const angle-cloud-table (gen-cloud (range -90 91)
-                                                    (range -15 (+ 15 dA) dA)
-                                                    long-array))
-
-(defn- angle-cloud [phi] (nth angle-cloud-table (+ 90 phi)))
-
-(def ^:private ^:const power-cloud (gen-cloud (range 0 5)
-                                              (range -1.0 2.0)
-                                              double-array))
-
-(comment (defn path-cloud [path]
-  (let [l (first path)]
-    (for [p (nth power-cloud (:power l)) a (angle-cloud (:angle l))] 
-      (cons (move-back l a p) path)))))
 
 ; Рассчёты для стадии последнего снижения: погашение вертикальной скорости с
 ; управлением (vec 0 4) 
@@ -122,7 +102,7 @@
 ; скорость такая, что гасить её не надо, нас это устраивает и мы отвечаем, что
 ; не нужна высота и время на сжигание топлива.
 
-(defn descending-constraint-h [^lander.Lander {vy :vy}]
+(defn- descending-constraint-h [^Lander {vy :vy}]
   (let [ve (- max-vy)
         ay (- 4.0 M)
         t  (/ (- ve vy) ay)]
@@ -130,63 +110,55 @@
       [true 0.0 0.0]
       [true (+ (* vy t) (* 0.5 ay ay t)) t])))
 
-(defn- braking-constraint-core [x vx ax vy]
-  (let [t  (/ (- vx) ax)
+(defn- braking-constraint-h-dx [^Lander {vx :vx vy :vy} ^Stage {left? :left?}]
+  (let [ax (if left? +4.0 -4.0)
+        t  (/ (- vx) ax)
         ay (- M)]
-    (if (< t 0)
+     (if (< t 0)
       [false 0.0 0.0 t]
       [true (+ (* vy t) (* 0.5 ay ay t))
             (+ (* vx t) (* 0.5 ay ay t))
             t]))) 
 
-(defn braking-constraint-h-dx [^lander.Lander {x :x vx :vx vy :vy}
-                               ^geometry.Section {ax :ax bx :bx}]
-  (cond (< x ax) (braking-constraint-core x vx -4.0 vy)
-        (> x bx) (braking-constraint-core x vx +4.0 vy)
-        :else    (braking-constraint-core x vx (if (>= vx 0.0) -4.0 +4.0) vy)))
-
-(defn constraint [^lander.Lander {x :x vx :vx h :y fuel :fuel :as l}
-                  ^geometry.Section {ax :ax bx :bx ay :ay :as landing-pad}]
+(defn constraint [^Lander {x :x vx :vx h :y fuel :fuel :as l}
+                  ^Stage {xp :x-pad yp :y-pad :as S}]
   (let [[descend-ok descend-h descend-t :as dc] (descending-constraint-h l)
-        [brake-ok brake-h brake-dx brake-t :as bc] (braking-constraint-h-dx l landing-pad)
-        dx (cond (< x ax)   (- bx x)
-                 (< bx x)   (- ax x)
-                 (> 0.0 vx) (- bx x)
-                 :else      (- ax x))]
+        [brake-ok brake-h brake-dx brake-t :as bc] (braking-constraint-h-dx l S)]
     (comment (println "dc:" dc "bc:" bc "dx:" dx))
-    (and brake-ok 
-         descend-ok
-         (>= dx (reserve brake-dx dx-constraint-reserve))
-         (<= ay (+ h (reserve (+ brake-h descend-h) h-constraint-reserve)))
+    (and brake-ok descend-ok
+         (<= (reserve brake-dx dx-constraint-reserve) (Math/abs ^double (- x xp)))
+         (<= yp (+ h (reserve (+ brake-h descend-h) h-constraint-reserve)))
          (<= (* 4.0 (+ descend-t brake-t)) fuel))))
 
-(defn- add-braking-stage [x vx ax bx stage]
-  (if (and (= 0 vx) (< ax x bx)) stage (cons {:stage :braking} stage)))
+(defn- add-braking-stage [^Lander {x :x vx :vx}
+                          ^geometry.Section {ax :ax ay :ay bx :bx :as pad} stages]
+  (if (and (= 0 vx) (<= ax x bx))
+    stages
+    (let [left? (or (> x bx) (> 0.0 vx))
+          xp (if left? bx ax)]
+      (cons (->Stage :braking left? pad pad xp xp ay nil) stages))))
 
-(defn- add-hover-stages [x ax bx l-rock r-rock stage] 
-  (let [on-left (fn [s] (if (< x (:bx s) bx) {:stage :hover
-                                              :direction :right
-                                              :section s}))
-
-        on-right (fn [s] (if (> x (:ax s) ax) {:stage :hover
-                                               :direction :left
-                                               :section s}))]
-
+(defn- add-hover-stages [^Lander {x :x}
+                         ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+                         l-rock r-rock stages] 
+  (let [on-left (fn [s] (if (< x (:bx s) bx) (->Stage :hover true s pad (:bx s) bx ay nil)))
+        on-right (fn [s] (if (> x (:ax s) ax) (->Stage :hover false s pad (:ax s) ax ay nil)))]
     (concat (cond (< x ax) (keep on-left l-rock)
-                  (> x bx) (keep on-right (reverse r-rock)))
-            stage)))
+                  (> x bx) (keep on-right (reverse r-rock))) stages)))
 
-(defn- add-reverse-stage [x vx ax bx stage]
+(defn- add-reverse-stage [^Lander {x :x vx :vx}
+                          ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+                          l-rock r-rock stages]
   (if (or (and (< x ax) (< vx 0.0))
           (and (> x bx) (> vx 0.0)))
     (cons {:stage :reverse} stage)
     stage))
 
-(defn detect-stages [^lander.Lander {x :x vx :vx} l-rock ^geometry.Section {ax :ax bx :bx} r-rock]
+(defn detect-stages [^lander.Lander l l-rock ^geometry.Section pad r-rock]
   (->> (list {:stage :descending})
-       (add-braking-stage x vx ax bx)
-       (add-hover-stages x ax bx l-rock r-rock)
-       (add-reverse-stage x vx ax bx)))
+       (add-braking-stage l pad)
+       (add-hover-stages l pad l-rock r-rock)
+       (add-reverse-stage l pad)))
 
 (defn- solve-square-equation [a b c]
   (if (= 0.0 a)
@@ -201,18 +173,12 @@
               tm     (* (- (- b) D-sqrt) a-rcpr)]
           [true (min tp tm) (max tp tm)])))))
 
-(defn- hover?
-  [{^geometry.Section {ax :ax bx :bx ay :ay by :by k :k} :section} ^lander.Lander {x :x y :y}]
-  (and (<= ax x bx)
-       (> (- y ay) (* k (- x ax)))
-       (<= 0 x x-max)
-       (<= 0 y y-max)))
-
-(defn solve-hover [^lander.Lander {x :x vx :vx angle :angle power :power :as l} target-x]
-  (let [ax         (x-acceleration angle power)
+(defn solve-hover
+  [^lander.Lander {x :x vx :vx ^lander.Control {a :angle p :power :as lc} :control :as l} target-x]
+  (let [ax (x-acceleration a p)
         [ok tl tr] (solve-square-equation (* 0.5 ax) vx (- x target-x))]
     (if-let [tta (and ok (if (<= 0.0 tl tr) tl (if (<= 0.0 tr) tr)))]
-      [true (move angle power tta l) tta]
+      [true (move lc tta l) tta]
       [false nil 0.0])))
 
 ; Здесь проблема с модулями, которые не успевают стабилизировать свой контроль
@@ -232,11 +198,12 @@
 ; FIXME: проверки на точные равенства - потенциальный источник больших проблем.
 ; Но пока работа над общей схемой.
 
-(defn- approach-loop [^lander.Lander lander ^geometry.Section {ax :ax bx :bx :as section} angle power]
+(defn- approach-loop
+  [^lander.Lander lander ^geometry.Section {ax :ax bx :bx :as section} ^lander.Control ctl]
   (loop [l lander t 0.0]
-    (if (control-match? angle power l)
+    (if (= ctl (:control l))
       [:ok l t]
-      (let [l-next (move angle power 1.0 l)]
+      (let [l-next (move ctl 1.0 l)]
         (cond (not (<= ax (:x l-next) bx))   [:out l t]
               (over-section? l-next section) [:ko l t] 
               :else                          (recur l-next (+ 1.0 t)))))))
