@@ -2,6 +2,9 @@
 
 (set! *warn-on-reflection* true)
 
+; (defn- debugln [& args] (apply println args))
+(defn- debugln [& args] nil)
+
 (defrecord Control [^long angle ^long power])
 
 (defrecord Lander [^double x
@@ -48,14 +51,14 @@
   (let [delta (- goal current)]
     (cond (= 0 delta) goal
           (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
-          (< 0 delta) (if (< delta max-delta) goal (- current max-delta)))))
+          (> 0 delta) (if (< delta max-delta) goal (- current max-delta)))))
 
-(defn- control-tune [^Control f ^Control t]
+(defn control-tune [^Control f ^Control t]
   (->Control (control-to (:angle f) (:angle t) angle-max-delta)
              (control-to (:power f) (:power t) power-max-delta)))
 
-(defn- x-acceleration [angle power] (* power (x-power angle)))
-(defn- y-acceleration [angle power] (- (* power (y-power angle)) M))
+(defn x-acceleration [angle power] (* power (x-power angle)))
+(defn y-acceleration [angle power] (- (* power (y-power angle)) M))
 
 (defn move [^Control tc t ^Lander {lc :control :as l}] 
   (if-not (or (= 1.0 t) (= tc lc))
@@ -124,7 +127,7 @@
                   ^Stage {xp :x-pad yp :y-pad :as S}]
   (let [[descend-ok descend-h descend-t :as dc] (descending-constraint-h l)
         [brake-ok brake-h brake-dx brake-t :as bc] (braking-constraint-h-dx l S)]
-    (comment (println "dc:" dc "bc:" bc "dx:" dx))
+    (debugln "dc:" dc "bc:" bc "dx:" brake-dx)
     (and brake-ok descend-ok
          (<= (reserve brake-dx dx-constraint-reserve) (Math/abs ^double (- x xp)))
          (<= yp (+ h (reserve (+ brake-h descend-h) h-constraint-reserve)))
@@ -210,10 +213,11 @@
 ; FIXME: проверки на точные равенства - потенциальный источник больших проблем.
 ; Но пока работа над общей схемой.
 
-(defn- approach-loop [^Lander lander
-                      ^Stage {{ax :ax bx :bx :as section} :section}
-                      ^lander.Control ctl]
+(defn approach-loop [^Lander lander
+                     ^Stage {{ax :ax bx :bx :as section} :section}
+                     ^lander.Control ctl]
   (loop [l lander t 0.0]
+    (debugln "approach-loop:" l t ax bx)
     (if (= ctl (:control l))
       [:ok l t]
       (let [l-next (move ctl 1.0 l)]
@@ -221,14 +225,16 @@
               (over-section? l-next section) [:ko l t] 
               :else                          (recur l-next (+ 1.0 t)))))))
 
-(defn- trace-hover [traces ^Stage stage ^lander.Lander {ctl :control :as lander} t]
+(defn- trace-hover [traces ^Stage stage ^Lander {ctl :control :as lander} t]
+  (debugln lander t stage)
   (if (traces ctl)
     traces
-    (let [[ok l tta] (solve-hover lander stage)]
-      (comment (println l (constraint l stage)))
+    (let [[ok l tta :as solution] (solve-hover lander stage)]
+      (debugln l (constraint l stage) "solution:" solution)
       (if-not (and ok (constraint l stage))
         traces
-        (let [t-int     (Math/ceil tta)
+        (let [t-ceil    (Math/ceil tta)
+              t-int     (if (= 0.0 t-ceil) 1.0 t-ceil)
               t-overall (+ t t-int)]
           (assoc traces ctl [true (move ctl t-int lander) t-overall])))))) 
 
@@ -236,14 +242,19 @@
                        ^Stage stage
                        ^Lander lander
                        ^Control ctl]
-  (comment (println ctl))
+  (debugln stage lander ctl)
   (let [[state lA t] (approach-loop lander stage ctl)]
-    (comment (println state target-x lA t))
+    (debugln state lA t)
     (case state
       :ko  traces
       :ok  (trace-hover traces stage lA t)
       :out (let [lC (assoc lA :control (control-tune (:control lA) ctl))]
              (trace-hover traces stage lC t)))))
+
+(defn get-landers [timed? traces]
+  (let [keepfn (fn [[ok l t]] (if ok (if timed? [l t] l)))
+        keyfn  (if timed? (comp - :fuel first) (comp - :fuel))]
+    (sort-by keyfn (keep keepfn (vals traces)))))
 
 ; Это общая схема, которая может пригодится для разных стадий
 

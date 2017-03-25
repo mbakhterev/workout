@@ -41,15 +41,60 @@
 (def ^:private ^:const stages (detect-stages i-lander l-shell l-pad r-shell))
 
 (defn- trace-control [l angle power]
-  (take-while (partial alive? shell) (reductions (wrap 1.0 move) l (repeat [angle power]))))
+  (take-while (partial alive? shell) (reductions (wrap move 1.0) l (repeat [angle power]))))
 
-(r/update-scene :traces (concat (for [p (range 4) a (range -90 91 5)] (trace-control i-lander a p))))
+(def ^:private ^:const hovers
+  (reduce (integrate-wrap integrate-hover (first stages) i-lander)
+          {}
+          (for [a (range -90 91 5) p (range 5)] [a p])))
+
+(def ^:private ^:const hovers-2
+  (reduce (integrate-wrap integrate-hover (second stages) (first (get-landers false hovers)))
+          {}
+          (for [a (range -90 91 5) p (range 5)] [a p])))
+
+(identity hovers-2)
+
+(r/update-scene :traces (concat (comment (for [p (range 4) a (range -90 91 5)] (trace-control i-lander a p)))
+                                (for [[{{a :angle p :power} :control} t] (list (first (get-landers true hovers)))]
+                                  (take (+ 1 t) (trace-control i-lander a p)))
+                                (for [[{{a :angle p :power} :control} t] (get-landers true hovers-2)]
+                                  (take (+ 1 t) (trace-control n-lander a p)))))
 
 (constraint (move -90 0 4.0 i-lander) l-pad)
+(map second (get-landers true hovers-2))
+(identity hovers-2)
+
+(trace-control i-lander 90 20)
+
+(map count (for [[{{a :angle p :power} :control} t] (get-landers true hovers)] (take t (trace-control i-lander a p))))
 
 (time (count (for [p (range 4) a (range -90 91 5)] {:trace (trace-control i-lander a p)})))
 
-(integrate-hover {} (first stages) i-lander (->Control 90 0))
+(get-landers true (integrate-hover {} (first stages) i-lander (->Control 90 0)))
+(get-landers false hovers)
+(identity hovers)
+(keep second (vals hovers))
+
+(time (count (for [[{{a :angle p :power} :control} t] (get-landers true hovers-2)]
+                                  (take (+ 1 t) (trace-control n-lander a p)))))
+
+(def ^:private ^:const n-lander (first (get-landers false hovers)))
+
+(doseq [p (range 4) a (range -90 91 5)]
+  (println a p)
+  (reduce (integrate-wrap integrate-hover (second stages) (first (get-landers false hovers))) {} (list [a p])))
+
+(reduce (integrate-wrap integrate-hover (second stages) h-lander) {} (list [-90 0]))
+
+(integrate-hover {} (second stages) n-lander (->Control -65 0))
+
+(control-tune (:control n-lander) (->Control -65 0))
+
+(approach-loop n-lander (second stages) (->Control -65 0))
+(move (->Control -65 0) 1.0 n-lander)
+(x-acceleration -65 0)
+(y-acceleration -65 0)
 
 (def ^:private ^:const t-lander
   #lander.Lander{:x 1000.0000000000005, :y 2672.0009667677978,

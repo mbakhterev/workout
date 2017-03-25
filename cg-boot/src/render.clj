@@ -41,13 +41,12 @@
               (* factor-x (:vx l))
               (- (* factor-y (:vy l)))
               (:fuel l)
-              (:angle l)
-              (:power l)))
+              (:control l)))
 
 (defn- correct-trace [L]
   (let [l (last L)]
     {:trace (map correct-lander L)
-     :mark  (str (apply format "%.3f|%.3f|%d|%d" ((juxt :vx :vy :angle :power) l)))}))
+     :mark  (str (apply format "%.3f|%.3f|%d|%d" ((juxt :vx :vy (comp :angle :control) (comp :power :control)) l)))}))
 
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag
@@ -59,12 +58,13 @@
   true)
 
 (defn- draw-lander [l]
-  (let [x  (:x l)
+  (let [c  (:control l)
+        x  (:x l)
         y  (:y l)
         vx (:vx l)
         vy (:vy l)
-        ax (* (:power l) (Math/sin (Math/toRadians (+ 0 (:angle l)))))
-        ay (* (:power l) (Math/cos (Math/toRadians (+ 0 (:angle l)))))]
+        ax (* (:power c) (Math/sin (Math/toRadians (+ 0 (:angle c)))))
+        ay (* (:power c) (Math/cos (Math/toRadians (+ 0 (:angle c)))))]
     (q/no-stroke)
     (q/fill 0)
     (q/ellipse (:x l) (:y l) 4 4)
@@ -135,7 +135,7 @@
               (doseq [l (:trace t)] (draw-lander l))
               (let [l (last (:trace t))
                     m (:mark t)]
-                (q/text m (+ (:x l) 5) (+ (:y l) 5))))))))
+                (q/text m (+ (:x l) 5) (- (:y l) 10))))))))
   
   (swap! scene assoc :redraw false)) 
 
