@@ -103,4 +103,63 @@
 Надо как-то совершенствовать. Но, кажется, ужаса-ужаса может и не случится. А
 может и случится. В общем, нужно разбираться.
 
-λ
+(define move (lambda ((tc Control) t (l Lander :control lc))
+                     (if (not (or (= 1.0 t) (= tc lc)))
+                         (throw (Exception. (format "cannot move that: %.3f %b. ctl: %d %d. lnd: %d %d"
+                                                     t (= tc lc) (:angle tc) (:power tc) (:angle lc) (:power lc)))))
+
+  (let (nc (Control :angle angle
+                    :power power) (control-tune lc tc)
+        ax (x-acceleration angle power)
+        ay (y-acceleration angle power)
+        (Lander :x x :y y :vx vx :vy vy :fuel fuel) l)
+       (Lander (+ x (* vx t) (* 0.5 ax t t))
+               (+ y (* vy t) (* 0.5 ay t t))
+               (+ vx (* ax t))
+               (+ vy (* ay t))
+               (- fuel (* power t))
+               nc))))
+
+Скобочки, по идее, не помешают:
+
+(let (Control (lambda ((Num t)) (type tuple :angle t :power t))
+     
+      control-to (lambda (current goal max-delta)
+                         (let (delta (- goal current))
+                              (cond (= 0 delta) goal
+                                    (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
+                                    (> 0 delta)) (if (< delta max-delta) goal (- current max-delta))))
+
+      angle-max-delta (the t 15)
+      power-max-delta (the t 1)
+
+      control-tune (lambda (t
+                            ((Control t) :angle fa :power fp)
+                            ((Control t) :angle ta :power tp))
+                           ((Control t) (control-to fa ta angle-max-delta)
+                                        (control-to fa ta power-max-delta))))
+
+    (define control (lambda (t) (tuple :Control (Control t)
+                                       :control-tune (control-tune t)))))
+
+Хотя, может быть, и избыточны
+
+(let Control (lambda t Num (type tuple :angle t :power t))
+     
+     control-to (lambda current goal max-delta
+                        (let delta (- goal current)
+                             (cond (= 0 delta) goal
+                                   (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
+                                   (> 0 delta)) (if (< delta max-delta) goal (- current max-delta))))
+
+      angle-max-delta (the t 15)
+      power-max-delta (the t 1)
+
+      control-tune (lambda t
+                           ((Control t) :angle fa :power fp)
+                           ((Control t) :angle ta :power tp)
+                           ((Control t) (control-to fa ta angle-max-delta)
+                                        (control-to fa ta power-max-delta)))
+
+    (define control (lambda t (tuple :Control (Control t)
+                                     :control-tune (control-tune t)))))
