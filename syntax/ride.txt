@@ -67,14 +67,40 @@
                                                            (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
                                                            (> 0 delta)) (if (< delta max-delta) goal (- current max-delta))))
 
-                       angle-max-delta (the t 15)
-                       power-max-delta (the t 1)
+                             angle-max-delta (the t 15)
+                             power-max-delta (the t 1)
 
-                       control-tune (lambda (Control :angle fa :power fp)
-                                            (Control :angle ta :power tp)
-                                            (Control (control-to fa ta angle-max-delta)
-                                                     (control-to fa ta power-max-delta)))
+                             control-tune (lambda (Control :angle fa :power fp)
+                                                  (Control :angle ta :power tp)
+                                                  (Control (control-to fa ta angle-max-delta)
+                                                           (control-to fa ta power-max-delta)))
 
-                      (tuple :Control Control :control-tune control-tune))))
+                             (tuple :Control Control :control-tune control-tune))))
 
+
+Эх. Не получится ли из этого всего ужас-ужас?
+
+(let Control (lambda (Num t) (type tuple :angle t :power t))
      
+     control-to (lambda current goal max-delta
+                        (let delta (- goal current)
+                             (cond (= 0 delta) goal
+                                   (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
+                                   (> 0 delta)) (if (< delta max-delta) goal (- current max-delta))))
+
+     angle-max-delta (the t 15)
+     power-max-delta (the t 1)
+
+     control-tune (lambda t
+                          ((Control t) :angle fa :power fp)
+                          ((Control t) :angle ta :power tp)
+                          ((Control t) (control-to fa ta angle-max-delta)
+                                       (control-to fa ta power-max-delta)))
+
+    (define control (lambda t (tuple :Control (Control t)
+                                     :control-tune (control-tune t)))))
+
+Надо как-то совершенствовать. Но, кажется, ужаса-ужаса может и не случится. А
+может и случится. В общем, нужно разбираться.
+
+λ
