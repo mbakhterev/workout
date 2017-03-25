@@ -21,9 +21,12 @@
                                              4000 200 5000 200 5500 1500 6999 2800]
                                    :lander [500 2700 100 0 800 -90 0]}])
 
+
+(defn- make-lander [L] (apply ->Lander (conj (vec (take 5 L)) (apply ->Control (drop 5 L)))))
+
 (def ^:private ^:const test-id 0)
 (def ^:private ^:const s-points (surface-points (:surface (test-data test-id))))
-(def ^:private ^:const i-lander (apply ->Lander (conj (:lander (test-data test-id))))) 
+(def ^:private ^:const i-lander (make-lander (:lander (test-data test-id))))
 (def ^:private ^:const l-pad (find-landing-pad s-points))
 (def ^:private ^:const surface (surface-sections s-points))
 (let [[l r] (surface-shell s-points l-pad)]
@@ -46,12 +49,12 @@
 
 (time (count (for [p (range 4) a (range -90 91 5)] {:trace (trace-control i-lander a p)})))
 
-(integrate-hover l-pad (first stages) i-lander {} 90 0)
+(integrate-hover {} (first stages) i-lander (->Control 90 0))
 
 (def ^:private ^:const t-lander
   #lander.Lander{:x 1000.0000000000005, :y 2672.0009667677978,
                  :vx 108.45640052594703, :vy -8.201858107192168,
-                 :fuel 786, :angle -30, :power 4})
+                 :fuel 786, :control #lander.Control{:angle -30, :power 4}})
 
 (constraint t-lander l-pad)
 
@@ -59,7 +62,11 @@
 (descending-constraint-h (assoc t-lander :vy -48))
 (identity l-pad)
 
-(map identity (reduce (integrate-wrap integrate-hover l-pad (first stages) i-lander) {}
+(identity i-lander)
+
+(count (reduce (integrate-wrap integrate-hover (first stages) i-lander) {}
         (for [a (range -90 91 5) p (range 5)] [a p])))
 
-(count (for [a (range -90 91) p (range 5)] [a p]))
+(count (for [a (range -90 91 5) p (range 5)] [a p]))
+
+(map (juxt :stage :left?) (detect-stages i-lander l-shell l-pad r-shell))
