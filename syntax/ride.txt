@@ -23,3 +23,58 @@
 
 Мысль тут такая, что для ride let - это некая внутренняя конструкция. Потому что
 мы пытаемся параллельно назначать множества переменных. Надо думать, в общем
+
+Ещё есть проблема define, let и lambda. Видимо, хотелось бы писать так:
+
+  (let approach-loop
+       (lambda section angle power
+               (let ax (:ax section)
+                    bx (:bx section)
+                    loop (lambda l-prev
+                                 (let l (move angle power 1.0 l-prev)
+                                      (cond (<= ax (:x l) bx))) ))))
+
+Ну, допустим, как вариант. В принципе, деконструкторы здесь уместны:
+
+  (let approach-loop
+       (lambda lander (Section :ax ax :bx bx) angle power
+         (let loop (lambda l-prev))))
+
+Но вопрос, на самом деле, несколько в ином. Области видимости. Как вариант с
+модулями:
+
+(defrecord Control [^long angle ^long power])
+
+(def ^:private ^:const angle-max-delta 15.0)
+(def ^:private ^:const power-max-delta 1.0)
+
+(defn- control-to [current goal max-delta]
+  (let [delta (- goal current)]
+    (cond (= 0 delta) goal
+          (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
+          (< 0 delta) (if (< delta max-delta) goal (- current max-delta)))))
+
+(defn- control-tune [^Control f ^Control t]
+  (->Control (control-to (:angle f) (:angle t) angle-max-delta)
+             (control-to (:power f) (:power t) power-max-delta)))
+
+(define control (lambda (numeric t)
+                        (let Control (tuple :angle t :power t)
+     
+                             control-to (lambda current goal max-delta
+                                                (let delta (- goal current)
+                                                     (cond (= 0 delta) goal
+                                                           (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
+                                                           (> 0 delta)) (if (< delta max-delta) goal (- current max-delta))))
+
+                       angle-max-delta (the t 15)
+                       power-max-delta (the t 1)
+
+                       control-tune (lambda (Control :angle fa :power fp)
+                                            (Control :angle ta :power tp)
+                                            (Control (control-to fa ta angle-max-delta)
+                                                     (control-to fa ta power-max-delta)))
+
+                      (tuple :Control Control :control-tune control-tune))))
+
+     
