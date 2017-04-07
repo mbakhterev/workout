@@ -60,6 +60,9 @@
 (defn x-acceleration [angle power] (* power (x-power angle)))
 (defn y-acceleration [angle power] (- (* power (y-power angle)) M))
 
+(def ^:private ^:const angle-delta 5)
+(def ^:private ^:const control-cloud (for [a (range -90 91 angle-delta) p (range 0 4)] (->Control a p)))
+
 (defn move [^Control tc t ^Lander {lc :control :as l}] 
   (if-not (or (= 1.0 t) (= tc lc))
       (throw (Exception. (format "cannot move that: %.3f %b. ctl: %d %d. lnd: %d %d"
@@ -238,10 +241,7 @@
               t-overall (+ t t-int)]
           (assoc traces ctl [true (move ctl t-int lander) t-overall])))))) 
 
-(defn integrate-hover [traces
-                       ^Stage stage
-                       ^Lander lander
-                       ^Control ctl]
+(defn integrate-hover [^Stage stage ^Lander lander traces ^Control ctl]
   (debugln stage lander ctl)
   (let [[state lA t] (approach-loop lander stage ctl)]
     (debugln state lA t)
@@ -259,4 +259,33 @@
 ; Это общая схема, которая может пригодится для разных стадий
 
 (defn integrate-wrap [f stage lander]
-  (fn [traces [angle power]] (f traces stage lander (->Control angle power))))
+  (fn [traces [angle power]] (f stage lander traces (->Control angle power))))
+
+(defn search-path [stages ^Lander lander]
+  (if-let [s (first stages)]
+    (case (:stage s)
+      :hover (hover-search s (next stages) lander)
+      (list))))
+
+(defn- hover-search [stage next-stages ^Lander lander]
+  (loop [[{ctl :control :as l} & L] (get-landers false (reduce (partial integrate-hover stage lander) {} control-cloud))]
+    (comment (println ctl L))
+    (if l (if-let [ctl-next (search-path next-stages l)]
+            (cons ctl ctl-next)
+            (recur L)))))
+
+(defn model-hover [^Control control ^Stage stage ^Lander lander]
+  (let [x-goal (:x-goal stage)
+        ctl-move (partial move control 1.0)
+        on-stage? (if (:left? stage)
+                    (fn [l] (<= (:x l) x-goal))
+                    (fn [l] (>= (:x l) x-goal)))]
+    (loop [l (ctl-move lander) L [lander]]
+      (if (on-stage? l)
+        (recur (ctl-move l) (conj L l))
+        (conj L l)))))
+
+(defn model-control [controls stages ^Lander lander]
+  (->> (map list stages controls)
+       (filter (fn [p] (= :hover (:stage (first p)))))
+       (reductions (fn [trace [s c]] (model-hover c s (last trace))) [lander])))

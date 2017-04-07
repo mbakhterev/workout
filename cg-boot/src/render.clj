@@ -116,7 +116,7 @@
                           (:bx s) (:by s)))))
 
           (if-let [landing (:landing-pad sc)]
-            (do (q/stroke 0)
+            (do (q/stroke 255 0 0)
                 (q/stroke-weight 1)
                 (let [delta (/ display-height 128)
                       mark-point (fn [x y] (q/line x (- y delta) x (+ y delta)))]
@@ -127,8 +127,21 @@
             (do (q/stroke 0)
                 (q/stroke-weight 1)
                 (doseq [s shell]
-                  (q/line (:ax s) (:ay s)
-                          (:bx s) (:by s)))))
+                  (q/line (:ax s) (:ay s) (:bx s) (:by s)))
+                (if-let [landing (:landing-pad sc)]
+                  (do (q/stroke 127)
+                      (q/stroke-weight 1)
+                      (doseq [s shell]
+                        (let [x (if (<= (:ax s) (:ax landing)) (:bx s) (:ax s))]
+                          (q/line x 0 x (- display-height 1))))))))
+
+          (if-let [landing (:landing-pad sc)]
+            (do (q/stroke 255 0 0)
+                (q/stroke-weight 1)
+                (let [delta (/ display-height 128)
+                      mark-point (fn [x y] (q/line x (- y delta) x (+ y delta)))]
+                  (mark-point (:ax landing) (:ay landing))
+                  (mark-point (:bx landing) (:by landing)))))
 
           (if-let [traces (:traces sc)]
             (doseq [t traces]

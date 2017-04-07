@@ -48,6 +48,8 @@
           {}
           (for [a (range -90 91 5) p (range 5)] [a p])))
 
+(def ^:private ^:const n-lander (first (get-landers false hovers))) 
+
 (def ^:private ^:const hovers-2
   (reduce (integrate-wrap integrate-hover (second stages) (first (get-landers false hovers)))
           {}
@@ -56,12 +58,14 @@
 (identity hovers-2)
 
 (r/update-scene :traces (concat (comment (for [p (range 4) a (range -90 91 5)] (trace-control i-lander a p)))
-                                (for [[{{a :angle p :power} :control} t] (list (first (get-landers true hovers)))]
-                                  (take (+ 1 t) (trace-control i-lander a p)))
-                                (for [[{{a :angle p :power} :control} t] (get-landers true hovers-2)]
-                                  (take (+ 1 t) (trace-control n-lander a p)))))
+                                (comment (for [[{{a :angle p :power} :control} t] (list (first (get-landers true hovers)))]
+                                           (take (+ 1 t) (trace-control i-lander a p))))
+                                (comment (for [[{{a :angle p :power} :control} t] (get-landers true hovers-2)]
+                                           (take (+ 1 t) (trace-control n-lander a p))))
 
-(constraint (move -90 0 4.0 i-lander) l-pad)
+                                (model-control (search-path stages i-lander) stages i-lander)))
+
+(constraint (move (->Control -90 0) 4.0 i-lander) l-pad)
 (map second (get-landers true hovers-2))
 (identity hovers-2)
 
@@ -71,7 +75,8 @@
 
 (time (count (for [p (range 4) a (range -90 91 5)] {:trace (trace-control i-lander a p)})))
 
-(get-landers true (integrate-hover {} (first stages) i-lander (->Control 90 0)))
+(get-landers true (integrate-hover (first stages) i-lander {} (->Control 90 0)))
+
 (get-landers false hovers)
 (identity hovers)
 (keep second (vals hovers))
@@ -79,7 +84,7 @@
 (time (count (for [[{{a :angle p :power} :control} t] (get-landers true hovers-2)]
                                   (take (+ 1 t) (trace-control n-lander a p)))))
 
-(def ^:private ^:const n-lander (first (get-landers false hovers)))
+
 
 (doseq [p (range 4) a (range -90 91 5)]
   (println a p)
@@ -115,3 +120,13 @@
 (count (for [a (range -90 91 5) p (range 5)] [a p]))
 
 (map (juxt :stage :left?) (detect-stages i-lander l-shell l-pad r-shell))
+
+(time (search-path stages i-lander))
+
+(map count (model-control (search-path stages i-lander) stages i-lander))
+
+(first (model-hover (first (search-path stages i-lander)) (first stages) i-lander))
+
+(identity stages)
+
+(take 10 (iterate (partial move (first (search-path stages i-lander)) 1.0) i-lander))
