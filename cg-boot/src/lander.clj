@@ -224,9 +224,9 @@
     (if (= ctl (:control l))
       [:ok l t]
       (let [l-next (move ctl 1.0 l)]
-        (cond (not (<= ax (:x l-next) bx))   [:out l t]
-              (over-section? l-next section) [:ko l t] 
-              :else                          (recur l-next (+ 1.0 t)))))))
+        (cond (not (<= ax (:x l-next) bx))         [:out l t]
+              (not (over-section? l-next section)) [:ko l t] 
+              :else                                (recur l-next (+ 1.0 t)))))))
 
 (defn- trace-hover [traces ^Stage stage ^Lander {ctl :control :as lander} t]
   (debugln lander t stage)
@@ -268,8 +268,11 @@
       (list))))
 
 (defn- hover-search [stage next-stages ^Lander lander]
-  (loop [[{ctl :control :as l} & L] (get-landers false (reduce (partial integrate-hover stage lander) {} control-cloud))]
-    (comment (println ctl L))
+  (loop [[{ctl :control :as l} & L] (get-landers false
+                                                 (reduce (partial integrate-hover stage lander)
+                                                         {}
+                                                         control-cloud))]
+    (debugln ctl L)
     (if l (if-let [ctl-next (search-path next-stages l)]
             (cons ctl ctl-next)
             (recur L)))))
