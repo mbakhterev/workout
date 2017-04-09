@@ -147,8 +147,9 @@
             (doseq [t traces]
               (doseq [l (:trace t)] (draw-lander l))
               (let [l (last (:trace t))
-                    m (:mark t)]
-                (q/text m (+ (:x l) 5) (- (:y l) 10))))))))
+                    m (:mark t)
+                    text-width (q/text-width m)]
+                (q/text m (- (:x l) 5 text-width) (+ (:y l) 10))))))))
   
   (swap! scene assoc :redraw false)) 
 
