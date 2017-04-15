@@ -22,8 +22,7 @@
                                    :lander [500 2700 100 0 800 -90 0]}])
 
 (defn- make-lander [L] (apply ->Lander (conj (vec (take 5 L))
-                                             (apply ->Control (drop 5 L))
-                                             0.0)))
+                                             (apply ->Control (drop 5 L)))))
 
 (def ^:private ^:const test-id 0)
 (def ^:private ^:const s-points (surface-points (:surface (test-data test-id))))
@@ -45,11 +44,11 @@
 
 (def ^:private ^:const control-cloud (for [a (range -90 91 15) p (range 0 5)] (->Control a p)))
 
-(r/update-scene :traces (concat (map (fn [c] (take-while (partial alive? shell)
+(r/update-scene :traces (concat (comment (map (fn [c] (take-while (partial alive? shell)
                                                          (iterate (partial move c 1.0) i-lander)))
-                                     control-cloud)
+                                     control-cloud))
 
-                                (comment (model-control (search-path stages i-lander) stages i-lander))))
+                                (model-control (search-path stages i-lander 0) stages i-lander)))
 
 (take-while (partial alive? shell) (iterate (partial move (->Control 90 4) 1.0) i-lander))
 
@@ -67,8 +66,6 @@
 
 (identity step-1)
 
-
-
 (def ^:private ^:const bad
   {:C (->Control 60 4)
    :S (nth stages 2) 
@@ -83,3 +80,5 @@
 (solve-square-equation (* 0.5 -3.46) 91.68 -1511.53)
 
 (let [r nil tl nil tr nil] (if-let [x (and r (if (<= 0.0 tl) tl (if (<= 0.0 tr) tr)))] x))
+
+(search-path stages i-lander 0)

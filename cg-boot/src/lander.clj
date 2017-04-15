@@ -2,11 +2,14 @@
 
 (set! *warn-on-reflection* true)
 
-(defn- debugln [flag & args]
-  (let [flags (hash-set :hover-search :search-path :solve-hover)]
-    (if (flags flag) (apply println args))))
+(comment (defn- debugln [flag & args]
+  (let [flags (hash-set ; :hover-search
+                        :search-path
+                        ; :solve-hover
+                        )]
+    (if (flags flag) (apply println args)))))
 
-; (defn- debugln [& args] nil)
+(defn- debugln [& args] nil)
 
 (defrecord Control [^long angle ^long power])
 
