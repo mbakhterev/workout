@@ -3,7 +3,7 @@
 (set! *warn-on-reflection* true)
 
 (comment (defn- debugln [flag & args]
-  (let [flags (hash-set ; :hover-search
+  (let [flags (hash-set :hover-search
                         :search-path
                         ; :solve-hover
                         )]
@@ -44,22 +44,19 @@
 ; Симметричность cos не учитывается, чтобы не усложнять формулу пересчёта угла phi
 ; в индекс таблицы i. Формула должна быть такой i = phi + 90
 
-(def ^:private ^:const cos-table
-  (mapv (fn [d] (Math/cos (Math/toRadians (+ d 90)))) (range -90 91)))
-
-(def ^:private ^:const sin-table
-  (mapv (fn [d] (Math/sin (Math/toRadians (+ d 90)))) (range -90 91)))
-
-; Функции для доступа в таблицы по значению угла
-
-(defn- x-power [phi] (nth cos-table (+ phi 90)))
-(defn- y-power [phi] (nth sin-table (+ phi 90)))
-
-; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
-; модуля и то управление, которое привело его в это положение. Положение -
-; вектор в фазовом пространстве (vec x y dx dy fuel)
-
-(def ^:private ^:const M 3.711)  
+; (def ^:private ^:const cos-table
+;   (mapv (fn [d] (Math/cos (Math/toRadians (+ d 90)))) (range -90 91)))
+; 
+; (def ^:private ^:const sin-table
+;   (mapv (fn [d] (Math/sin (Math/toRadians (+ d 90)))) (range -90 91)))
+; 
+; ; Функции для доступа в таблицы по значению угла
+; 
+; (defn- x-power [phi] (nth cos-table (+ phi 90)))
+; (defn- y-power [phi] (nth sin-table (+ phi 90)))
+; 
+; 
+; (def ^:private ^:const M 3.711)  
 
 (def ^:private ^:const angle-max-delta 15.0)
 (def ^:private ^:const power-max-delta 1.0)
@@ -74,14 +71,32 @@
   (->Control (tune-value (:angle f) (:angle t) angle-max-delta)
              (tune-value (:power f) (:power t) power-max-delta)))
 
-(defn- x-acceleration [angle power] (* power (x-power angle)))
-(defn- y-acceleration [angle power] (- (* power (y-power angle)) M))
+; (defn- x-acceleration [angle power] (* power (x-power angle)))
+; (defn- y-acceleration [angle power] (- (* power (y-power angle)) M))
+
+; Таблица ускорений в зависимости от угла и мощности. В рассчёте учитываем, что
+; угол задаётся от оси (+ PI/2)
+
+(let [M 3.711
+      cos (fn [a] (Math/cos (Math/toRadians (+ 90 a))))
+      sin (fn [a] (Math/sin (Math/toRadians (+ 90 a))))
+      x-force (fn [a p] (* p (cos a)))
+      y-force (fn [a p] (- (* p (sin a)) M))
+      make-table (fn [f] (vec (for [p (range 0 5)] (vec (for [a (range -90 91)] (f a p))))))
+      x-table (make-table x-force)
+      y-table (make-table y-force)]
+  (defn- x-acceleration [a p] (nth (nth x-table p) (+ 90 a)))
+  (defn- y-acceleration [a p] (nth (nth y-table p) (+ 90 a))))
 
 (def ^:private ^:const power-cloud (range 0 5)) 
 (def ^:private ^:const angle-delta 5)
 (def ^:private ^:const angle-cloud (range -90 91 angle-delta))
-(def ^:private ^:const control-cloud (for [a angle-cloud p power-cloud] (->Control a p)))
+(def ^:const control-cloud (for [a angle-cloud p power-cloud] (->Control a p)))
 
+; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
+; модуля и то управление, которое привело его в это положение. Положение -
+; вектор в фазовом пространстве (vec x y dx dy fuel)
+ 
 (defn move [^Control tc t ^Lander {lc :control :as l}] 
   (assert (or (= 1.0 t) (= tc lc)))
 
@@ -282,16 +297,12 @@
 (declare search-path)
 
 (defn- hover-search [stage next-stages ^Lander lander depth]
-;  (debugln :hover-search depth lander)
-  (debugln :hover-search "HS" depth lander)
   (let [traces (reduce (partial integrate-hover stage lander) {} control-cloud)]
-    (debugln :hover-search "HS traced" depth (count traces))
     (loop [L (get-landers false traces)]
-      (debugln :hover-search depth (count L))
+      (debugln :hover-search depth (count L) (count traces))
       (if-not (empty? L)
         (let [{ctl :control :as l} (first L)
               ctl-next (search-path next-stages l (+ 1 depth))]
-;          (debugln :hover-search ctl-next)
           (if ctl-next 
             (cons ctl ctl-next)
             (recur (next L))))))))

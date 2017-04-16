@@ -33,52 +33,28 @@
   (def ^:private ^:const shell (vec (concat l (list l-pad) r)))
   (def ^:private ^:const l-shell l)
   (def ^:private ^:const r-shell r))
+
+(def ^:private ^:const stages (detect-stages i-lander l-shell l-pad r-shell)) 
+
+(def ^:private ^:const bad-cases
+  [{:C (->Control 60 4)
+    :S (nth stages 2) 
+    :L #lander.Lander{:x 1500.0, :y 2514.4499999999994, :vx 100.0, :vy -37.10999999999999, :fuel 800, :control #lander.Control{:angle -15, :power 0}}}
+   
+   {:C (->Control 20 4)
+    :S (nth stages 2)
+    :L #lander.Lander{:x 1500.3393543299987, :y 2529.3060059296076, :vx 99.64872884586892, :vy -27.17071128706871, :fuel 790, :control #lander.Control{:angle 5, :power 4}}}])
  
+(def ^:private ^:const bad (nth bad-cases 1))
+
 (r/update-scene :surface surface)
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell) 
 
-(def ^:private ^:const stages (detect-stages i-lander l-shell l-pad r-shell))
+(r/update-scene :traces (concat (list (take-while (partial alive? shell) (iterate (partial move (->Control 0 4) 1.0) (:L bad))))))
 
-(identity (map (juxt :stage :left?) stages))
-
-(def ^:private ^:const control-cloud (for [a (range -90 91 15) p (range 0 5)] (->Control a p)))
-
-(r/update-scene :traces (concat (comment (map (fn [c] (take-while (partial alive? shell)
-                                                         (iterate (partial move c 1.0) i-lander)))
-                                     control-cloud))
-
-                                (model-control (search-path stages i-lander 0) stages i-lander)))
-
-(take-while (partial alive? shell) (iterate (partial move (->Control 90 4) 1.0) i-lander))
-
-(over-section? i-lander (:section (first stages)))
-
-(align-control i-lander (first stages) (->Control 90 4))
-
-(count control-cloud)
-
-(def ^:private step-1 (get-landers false (reduce (partial integrate-hover (first stages) i-lander) {} control-cloud)))
-
-(def ^:private step-2 (get-landers false (reduce (partial integrate-hover (second stages) (first step-1)) {} control-cloud)))
-
-(def ^:private step-3 (get-landers false (reduce (partial integrate-hover (nth stages 3) (first step-2)) {} control-cloud)))
-
-(identity step-1)
-
-(def ^:private ^:const bad
-  {:C (->Control 60 4)
-   :S (nth stages 2) 
-   :L #lander.Lander{:x 1500.0, :y 2514.4499999999994, :vx 100.0, :vy -37.10999999999999, :fuel 800, :control #lander.Control{:angle -15, :power 0}}})
-
-(solve-hover (align-control (:L bad) (:S bad) (:C bad)) (:S bad))
-
-(integrate-hover (:S bad) (:L bad) {} (:C bad))
-
-(align-control (:L bad) (:S bad) (:C bad))
-
-(solve-square-equation (* 0.5 -3.46) 91.68 -1511.53)
-
-(let [r nil tl nil tr nil] (if-let [x (and r (if (<= 0.0 tl) tl (if (<= 0.0 tr) tr)))] x))
+(get-landers false (reduce (partial integrate-hover (:S bad) (:L bad)) {} control-cloud))
 
 (search-path stages i-lander 0)
+
+(search-path (drop 2 stages) (:L bad) 0)
