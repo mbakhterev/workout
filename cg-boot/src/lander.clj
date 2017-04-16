@@ -40,15 +40,6 @@
                  ^Lander lander
                  ^double dt])
 
-; (def ^:private ^:const angle-max-delta 15.0)
-; (def ^:private ^:const power-max-delta 1.0)
-; 
-; (defn- tune-value [current goal max-delta]
-;   (let [delta (- goal current)]
-;     (cond (= 0 delta) goal
-;           (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
-;           (> 0 delta) (if (< delta max-delta) goal (- current max-delta)))))
-
 (defn- control-to [f t]
   (let [angle-max-delta 15
         power-max-delta 1
@@ -59,9 +50,6 @@
                              (> 0 delta) (if (< delta max-delta) goal (- current max-delta)))))]
     (->Control (tune-value (:angle f) (:angle t) angle-max-delta)
                (tune-value (:power f) (:power t) power-max-delta))))
-
-; (defn- x-acceleration [angle power] (* power (x-power angle)))
-; (defn- y-acceleration [angle power] (- (* power (y-power angle)) M))
 
 ; Таблица ускорений в зависимости от угла и мощности. В рассчёте учитываем, что
 ; угол задаётся от оси (+ PI/2)
@@ -77,10 +65,7 @@
   (defn- x-acceleration [a p] (nth (nth x-table p) (+ 90 a)))
   (defn- y-acceleration [a p] (nth (nth y-table p) (+ 90 a))))
 
-(def ^:private ^:const power-cloud (range 0 5)) 
-(def ^:private ^:const angle-delta 5)
-(def ^:private ^:const angle-cloud (range -90 91 angle-delta))
-(def ^:const control-cloud (for [a angle-cloud p power-cloud] (->Control a p)))
+
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
 ; модуля и то управление, которое привело его в это положение. Положение -
@@ -88,7 +73,6 @@
  
 (defn move [^Control tc t ^Lander {lc :control :as l}] 
   (assert (or (= 1.0 t) (= tc lc)))
-
   (let [{angle :angle power :power :as nc} (control-to lc tc)
         ax (x-acceleration angle power)
         ay (y-acceleration angle power)
@@ -100,29 +84,38 @@
               (- fuel (* power t))
               nc)))
 
-(def ^:private ^:const x-max (- 7000.0 1.0))
-(def ^:private ^:const y-max (- 3000.0 1.0))
+; Облако возможных управлений
 
-(defn- in-range? [{x :x} {ax :ax bx :bx}] (and (<= ax x) (< x bx)))
+(let [power-cloud (range 0 5)
+      angle-delta 5
+      angle-cloud (range -90 91 angle-delta)]
+  (def ^:const control-cloud (for [p power-cloud a angle-cloud] (->Control a p))))
+
+; Проверки того, что модель над поверхностью Марса
+
+(defn- in-range? [{x :x} {ax :ax bx :bx}]
+  (and (<= ax x) (< x bx)))
 
 (defn- over-line? [{x :x y :y} {ax :ax ay :ay k :k}]
   (let [rx (- x ax)
-        ry (- y ay)] (< (* k rx) ry)))
+        ry (- y ay)]
+    (< (* k rx) ry)))
 
-(defn over-section? [lander section] (and (in-range? lander section)
-                                          (over-line? lander section)))
+(defn over-section? [lander section]
+  (and (in-range? lander section)
+       (over-line? lander section)))
 
 (defn alive? [surface {x :x y :y :as lander}]
-  (and (<= 0 x x-max)
-       (<= 0 y y-max)
-       (over-line? lander (first (filter (partial in-range? lander) surface)))))
+  (let [x-max (- 7000.0 1.0)
+        y-max (- 3000.0 1.0)]
+    (and (<= 0 x x-max)
+         (<= 0 y y-max)
+         (over-line? lander (first (filter (partial in-range? lander) surface))))))
 
 ; Рассчёты для стадии последнего снижения: погашение вертикальной скорости с
 ; управлением (vec 0 4) 
 
-(def ^:private ^:const max-vy 38.0)
-(def ^:private ^:const h-constraint-reserve 0.125)
-(def ^:private ^:const dx-constraint-reserve 0.125)
+; (def ^:private ^:const max-vy 38.0)
 
 (defn- reserve [x r] (+ x (* x r)))
 
@@ -132,54 +125,61 @@
 ; не нужна высота и время на сжигание топлива.
 
 (defn- descend-constraint [{vy :vy}]
-  (let [ve (- max-vy)
-        ay (- 4.0 M)
+  (let [max-vy 38.0
+        ve (- max-vy)
+        ay (y-acceleration 0 4)
         t  (/ (- ve vy) ay)]
     (if (< t 0.0)
       (->Constraint 0.0 0.0 0.0)
       (->Constraint 0.0 (+ (* vy t) (* 0.5 ay ay t)) t))))
 
 (defn- brake-constraint [{vx :vx vy :vy} {left? :left?}]
-  (let [ax (if left? -4.0 +4.0)
-        t  (/ (- vx) ax)
-        ay (- M)]
+  (let [xi (if left? 90 -90)
+        ay (y-acceleration xi 4)
+        ax (x-acceleration xi 4)
+        t  (/ (- vx) ax)]
     (if (<= 0.0 t)
       (->Constraint (+ (* vx t) (* 0.5 ax ax t)) 
                     (+ (* vy t) (* 0.5 ay ay t))
                     t)))) 
 
+; (def ^:private ^:const h-constraint-reserve 0.125)
+; (def ^:private ^:const dx-constraint-reserve 0.125)
+ 
 (defn- constraint [{x :x h :y fuel :fuel :as l}
                    {xp :x-pad yp :y-pad left? :left? :as S}]
-  (let [dc (descend-constraint l)
+  (let [dh-reserve 0.125
+        dx-reserve 0.125
+        dc (descend-constraint l)
         bc (brake-constraint l S)
-        x-cmp (if left? > <)]
-
-    (debugln :constraint "dc:" dc "bc:" bc "dx:" (:dx bc))
+        xr (+ x (reserve (:dx bc) dx-reserve))
+        hr (+ h (reserve (:dh bc) dh-reserve))
+        x-cmp (if left? < >)]
 
     (and dc bc
-         (x-cmp xp (+ x (reserve (:dx bc) dx-constraint-reserve)))
-         (< yp (+ h (reserve (+ (:dh bc) (:dh dc)) h-constraint-reserve)))
+         (x-cmp xr xp)
+         (< yp hr)
          (< (* 4.0 (+ (:t bc) (:t dc))) fuel))))
 
-(defn- add-braking-stage [{x :x vx :vx :as lander}
-                          {ax :ax ay :ay bx :bx :as pad}
-                          stages]
+(defn- braking-stage [{x :x vx :vx :as lander}
+                      {ax :ax ay :ay bx :bx :as pad}
+                      stages]
   (if (and (= 0 vx) (in-range? lander pad))
     stages
     (let [left? (or (< x ax) (< 0.0 vx))
           xp (if left? bx ax)]
       (cons (->Stage :braking left? pad pad xp xp ay nil) stages))))
 
-(defn- add-hover-stages [{x :x}
-                         {ax :ax ay :ay bx :bx :as pad}
-                         l-rock r-rock stages] 
+(defn- hover-stages [{x :x}
+                     {ax :ax ay :ay bx :bx :as pad}
+                     l-rock r-rock stages] 
   (let [on-left (fn [s] (if (< x (:bx s) bx) (->Stage :hover true s pad (:bx s) bx ay nil)))
         on-right (fn [s] (if (> x (:ax s) ax) (->Stage :hover false s pad (:ax s) ax ay nil)))]
     (concat (cond (< x ax) (keep on-left l-rock)
                   (> x bx) (keep on-right (reverse r-rock)))
             stages)))
 
-(defn- add-reverse-stage [{x :x vx :vx :as lander}
+(defn- reverse-stage [{x :x vx :vx :as lander}
                           {ax :ax ay :ay bx :bx :as pad}
                           l-rock r-rock stages]
   (if-not (or (and (< x ax) (< vx 0.0))
@@ -194,18 +194,18 @@
       (cons (->Stage :reverse left? s pad (if left? (:bx s) (:ax s)) (if left? bx ax) ay surface)
             stages))))
 
-(defn- add-descend-stage [{x :x} {ax :ax ay :ay bx :bx :as pad}]
+(defn- descend-stage [{x :x} {ax :ax ay :ay bx :bx :as pad}]
   (let [left? (< x ax)
         xp (if left? bx ax)]
     (list (->Stage :descending left? pad pad xp xp ay nil))))
 
 (defn detect-stages [l l-rock pad r-rock]
-  (->> (add-descend-stage l pad)
-       (add-braking-stage l pad)
-       (add-hover-stages l pad l-rock r-rock)
-       (add-reverse-stage l pad l-rock r-rock)))
+  (->> (descend-stage l pad)
+       (braking-stage l pad)
+       (hover-stages l pad l-rock r-rock)
+       (reverse-stage l pad l-rock r-rock)))
 
-(defn solve-square-equation [a b c]
+(defn- solve-square-equation [a b c]
   (if (= 0.0 a)
     (if (not= 0.0 b)
       (let [t (/ (- c) b)] (->Roots t t)))
@@ -220,31 +220,13 @@
 
 (defn solve-hover [{x :x vx :vx {a :angle p :power :as lc} :control :as l}
                    {x-target :x-goal}]
-  (debugln :solve-hover l x vx x-target (- x x-target))
   (let [ax (x-acceleration a p)
         r  (solve-square-equation (* 0.5 ax) vx (- x x-target))]
-    (debugln :solve-hover ax r)
     (if r 
       (let [{tl :left tr :right} r
-            tta (if (<= 0.0 tl) tl (if (<= 0.0 tr) tr))]
-        (->Move :ok (move lc tta l) tta)))))
-
-; Здесь проблема с модулями, которые не успевают стабилизировать свой контроль
-; до границы отрезка. Чтобы точно их моделировать, надо внести поправку перед
-; solve-рассчётом в угол и мощность. Кроме этого, для проверки надо накопить
-; общее время полёта. Чтобы не порождать дополнительные траектории разумно
-; запоминать уже пройденные. Структура отображения (экспериментальный синтаксис)
-;
-;   (type -> (tuple angle power) (tuple ok lander time))
-;
-; После этого надо проанализировать lander на ограничения, и вернуть позицию во
-; время (ceiling time). (move a p (ceiling time) l) будет в области действия
-; следующего сегмента, поэтому необходимо предварительно проверить входящие
-; точки на ограничения. По высоте и скорости тоже. Но, видимо, их разумнее
-; отфильтровать в другом месте
-
-; FIXME: проверки на точные равенства - потенциальный источник больших проблем.
-; Но пока работа над общей схемой.
+            tta (if (<= 0.0 tl) tl tr)]
+        (if (<= 0.0 tta) 
+          (->Move :ok (move lc tta l) tta))))))
 
 (defn align-control [lander {section :section} ctl]
   (loop [l lander t 0.0]
@@ -252,6 +234,23 @@
           (not (in-range? l section))  (->Move :out l t)   
           (= ctl (:control l))         (->Move :ok l t)
           :else                        (recur (move ctl 1.0 l) (+ 1.0 t)))))
+
+(defn- hover-ok-integrate-one [{section :section :as stage} {t :dt lander :lander}]
+  (if-let [m (solve-hover lander stage)]
+    (let [{tta :dt l :lander} m]
+      (if (and (constraint l stage)
+               (over-line? l section))
+        (let [t-ceil    (Math/ceil tta)
+              t-overall (+ t t-ceil)]
+          (->Move :ok (move (:control l) t-ceil lander) t-overall))))))
+
+(defn- hover-out-integrate [moves]
+  (map (fn [[k v]] (first v)) (group-by (comp :control :lander) moves)))
+
+(defn hover-move-cloud [lander stage]
+  (let [aligned (group-by :state (keep (partial align-control lander stage) control-cloud))]
+    (concat (keep (partial hover-ok-integrate-one stage) (:ok aligned))
+            (hover-out-integrate (:out aligned)))))
 
 (defn- trace-hover [traces {section :section :as stage} {ctl :control :as lander} t]
   (debugln :trace-hover lander t stage)
@@ -296,11 +295,21 @@
             (cons ctl ctl-next)
             (recur (next L))))))))
 
-(defn search-path [stages ^Lander lander depth]
-  (debugln :search-path "SP" depth)
+(declare search-guide)
+
+(defn- hover-guide [stage next-stages lander]
+  (loop [landers (map :lander (hover-move-cloud lander stage))]
+    (if-not (empty? landers)
+      (let [{ctl :control :as l} (first landers)
+            ctl-next (search-guide next-stages l)]
+        (if ctl-next
+          (cons ctl ctl-next)
+          (recur (next landers)))))))
+
+(defn search-guide [stages ^Lander lander]
   (if-let [s (first stages)]
     (case (:stage s)
-      :hover (hover-search s (next stages) lander depth)
+      :hover (hover-guide s (next stages) lander)
       (list))))
 
 (defn model-hover [^Control control ^Stage stage ^Lander lander]
