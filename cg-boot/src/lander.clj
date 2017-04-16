@@ -40,36 +40,25 @@
                  ^Lander lander
                  ^double dt])
 
-; Синусы и косинусы для рассчёта проекции тяги. Угол задаётся от оси (+ PI/2).
-; Симметричность cos не учитывается, чтобы не усложнять формулу пересчёта угла phi
-; в индекс таблицы i. Формула должна быть такой i = phi + 90
+; (def ^:private ^:const angle-max-delta 15.0)
+; (def ^:private ^:const power-max-delta 1.0)
+; 
+; (defn- tune-value [current goal max-delta]
+;   (let [delta (- goal current)]
+;     (cond (= 0 delta) goal
+;           (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
+;           (> 0 delta) (if (< delta max-delta) goal (- current max-delta)))))
 
-; (def ^:private ^:const cos-table
-;   (mapv (fn [d] (Math/cos (Math/toRadians (+ d 90)))) (range -90 91)))
-; 
-; (def ^:private ^:const sin-table
-;   (mapv (fn [d] (Math/sin (Math/toRadians (+ d 90)))) (range -90 91)))
-; 
-; ; Функции для доступа в таблицы по значению угла
-; 
-; (defn- x-power [phi] (nth cos-table (+ phi 90)))
-; (defn- y-power [phi] (nth sin-table (+ phi 90)))
-; 
-; 
-; (def ^:private ^:const M 3.711)  
-
-(def ^:private ^:const angle-max-delta 15.0)
-(def ^:private ^:const power-max-delta 1.0)
-
-(defn- tune-value [current goal max-delta]
-  (let [delta (- goal current)]
-    (cond (= 0 delta) goal
-          (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
-          (> 0 delta) (if (< delta max-delta) goal (- current max-delta)))))
-
-(defn- control-to [^Control f ^Control t]
-  (->Control (tune-value (:angle f) (:angle t) angle-max-delta)
-             (tune-value (:power f) (:power t) power-max-delta)))
+(defn- control-to [f t]
+  (let [angle-max-delta 15
+        power-max-delta 1
+        tune-value (fn [current goal max-delta]
+                     (let [delta (- goal current)]
+                       (cond (= 0 delta) goal
+                             (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
+                             (> 0 delta) (if (< delta max-delta) goal (- current max-delta)))))]
+    (->Control (tune-value (:angle f) (:angle t) angle-max-delta)
+               (tune-value (:power f) (:power t) power-max-delta))))
 
 ; (defn- x-acceleration [angle power] (* power (x-power angle)))
 ; (defn- y-acceleration [angle power] (- (* power (y-power angle)) M))
