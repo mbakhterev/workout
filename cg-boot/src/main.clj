@@ -51,14 +51,7 @@
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell) 
 
-(r/update-scene :traces (concat (for [{t :dt {ctl :control} :lander} (hover-move-cloud i-lander (first stages))]
-                                  (take (+ t 1) (iterate (partial move ctl 1.0) i-lander)))))
-
-(get-landers false (reduce (partial integrate-hover (:S bad) (:L bad)) {} control-cloud))
-
-(time (search-path stages i-lander 0))
-
-(search-path (drop 2 stages) (:L bad) 0)
+(r/update-scene :traces (model-control (search-guide stages i-lander) stages i-lander))
 
 (count (keep (fn [[k v]] (if true [k (count (set v))]))
       (group-by (comp :control :lander)

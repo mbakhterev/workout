@@ -71,8 +71,9 @@
 ; модуля и то управление, которое привело его в это положение. Положение -
 ; вектор в фазовом пространстве (vec x y dx dy fuel)
  
-(defn move [^Control tc t ^Lander {lc :control :as l}] 
+(defn move [tc t {lc :control :as l}] 
   (assert (or (= 1.0 t) (= tc lc)))
+
   (let [{angle :angle power :power :as nc} (control-to lc tc)
         ax (x-acceleration angle power)
         ay (y-acceleration angle power)
@@ -97,9 +98,10 @@
   (and (<= ax x) (< x bx)))
 
 (defn- over-line? [{x :x y :y} {ax :ax ay :ay k :k}]
-  (let [rx (- x ax)
+  (let [min-height 32.0
+        rx (- x ax)
         ry (- y ay)]
-    (< (* k rx) ry)))
+    (< (+ (* k rx) min-height) ry)))
 
 (defn over-section? [lander section]
   (and (in-range? lander section)
@@ -252,49 +254,6 @@
     (concat (keep (partial hover-ok-integrate-one stage) (:ok aligned))
             (hover-out-integrate (:out aligned)))))
 
-(defn- trace-hover [traces {section :section :as stage} {ctl :control :as lander} t]
-  (debugln :trace-hover lander t stage)
-  (if (traces ctl)
-    traces
-    (let [solution (solve-hover lander stage)]
-      (if-not solution
-        (assoc traces ctl (->Move :ko nil 0.0))
-        (let [{tta :dt l :lander} solution]
-          (debugln :trace-hover l (constraint l stage) "solution:" solution)
-          (if-not (and (constraint l stage)
-                       (over-line? l section))
-            (assoc traces ctl (->Move :ko nil 0.0))
-            (let [t-ceil    (Math/ceil tta)
-                  t-overall (+ t t-ceil)]
-              (assoc traces ctl (->Move :ok (move ctl t-ceil lander) t-overall))))))))) 
-
-(defn integrate-hover [stage lander traces ctl]
-  (debugln :integrate-hover stage lander ctl)
-  (let [{state :state l :lander t :dt :as m} (align-control lander stage ctl)]
-    (debugln :integrate-hover state l t)
-    (case state
-      nil  traces
-      :ok  (trace-hover traces stage l t)
-      :out (let [c (:control l)] (if (traces c) traces (assoc traces c m))))))
-
-(defn get-landers [timed? traces]
-  (let [keepfn (fn [{st :state l :lander t :dt}] (if (not= st :ko) (if timed? [l t] l)))
-        keyfn  (if timed? (comp - :fuel first) (comp - :fuel))]
-    (sort-by keyfn (keep keepfn (vals traces)))))
-
-(declare search-path)
-
-(defn- hover-search [stage next-stages ^Lander lander depth]
-  (let [traces (reduce (partial integrate-hover stage lander) {} control-cloud)]
-    (loop [L (get-landers false traces)]
-      (debugln :hover-search depth (count L) (count traces))
-      (if-not (empty? L)
-        (let [{ctl :control :as l} (first L)
-              ctl-next (search-path next-stages l (+ 1 depth))]
-          (if ctl-next 
-            (cons ctl ctl-next)
-            (recur (next L))))))))
-
 (declare search-guide)
 
 (defn- hover-guide [stage next-stages lander]
@@ -316,7 +275,7 @@
   (let [x-goal (:x-goal stage)
         ctl-move (partial move control 1.0)
         on-stage? (if (:left? stage)
-                    (fn [l] (<= (:x l) x-goal))
+                    (fn [l] (< (:x l) x-goal))
                     (fn [l] (>= (:x l) x-goal)))]
     (loop [l (ctl-move lander) L [lander]]
       (if (on-stage? l)
@@ -325,5 +284,4 @@
 
 (defn model-control [controls stages ^Lander lander]
   (->> (map list stages controls)
-       (filter (fn [p] (= :hover (:stage (first p)))))
        (reductions (fn [trace [s c]] (model-hover c s (last trace))) [lander])))
