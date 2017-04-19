@@ -36,6 +36,10 @@
 
 (def ^:private ^:const stages (detect-stages i-lander l-shell l-pad r-shell)) 
 
+(let [guide-control (search-guide stages i-lander)]
+  (def ^:private ^:const guide (model-control guide-control stages i-lander)))
+
+
 (def ^:private ^:const bad-cases
   [{:C (->Control 60 4)
     :S (nth stages 2) 
@@ -53,11 +57,20 @@
 
 (r/update-scene :traces (model-control (search-guide stages i-lander) stages i-lander))
 
-(count (keep (fn [[k v]] (if true [k (count (set v))]))
-      (group-by (comp :control :lander)
-                (:ok (group-by :state (keep (partial align-control (:L bad) (:S bad)) control-cloud))))))
+(comment (count (keep (fn [[k v]] (if true [k (count (set v))]))
+                      (group-by (comp :control :lander)
+                                (:ok (group-by :state (keep (partial align-control (:L bad) (:S bad)) control-cloud))))))
 
-(count (hover-move-cloud i-lander (first stages)))
+         (count (hover-move-cloud i-lander (first stages)))
 
-(time (search-guide stages i-lander))
-(search-guide (drop 2 stages) (:L bad))
+         (time (search-guide stages i-lander))
+         (search-guide (drop 2 stages) (:L bad)))
+
+(def ^:private ^:const d-lander (last (last guide)))
+(def ^:private ^:const brk-stage (first (filter (comp (partial = :braking) :stage) stages)))
+
+(let [d-lander (last (last guide))
+      brk-stage (first (filter (comp (partial = :braking) :stage) stages))]
+  (keep (partial brake-integrate brk-stage d-lander) control-cloud))
+
+(map :stage stages)
