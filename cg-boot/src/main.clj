@@ -39,7 +39,6 @@
 (let [guide-control (search-guide stages i-lander)]
   (def ^:private ^:const guide (model-control guide-control stages i-lander)))
 
-
 (def ^:private ^:const bad-cases
   [{:C (->Control 60 4)
     :S (nth stages 2) 
@@ -74,3 +73,27 @@
   (keep (partial brake-integrate brk-stage d-lander) control-cloud))
 
 (map :stage stages)
+
+(:lander (last (first (hover-cloud (first stages) i-lander))))
+
+(hover-align-control (first stages) i-lander (->Control -90 4))
+
+(hover-integrate-ok-one (first stages) i-lander)
+
+(hover-integrate (first stages) i-lander {:moves [] :outs #{}} (->Control -90 4))
+
+(let [stage (first stages)
+      lander i-lander
+      ctl (->Control -90 4)
+      ma (hover-align-control stage )
+      ])
+
+(time (search-guide stages i-lander))
+
+(let [lander #lander.Lander{:x 1000.0, :y 2653.6125, :vx 100.0, :vy -18.555, :fuel 800, :control #lander.Control{:angle -90, :power 0}}
+      stage (second stages)
+      ctl (->Control -15 3)]
+  (reduce (partial hover-integrate stage lander) {:moves [] :outs #{}} control-cloud)
+  )
+
+

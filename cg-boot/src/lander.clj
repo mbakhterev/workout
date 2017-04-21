@@ -5,10 +5,13 @@
 (comment
   (defn- debugln [flag & args]
     (let [flags (hash-set ; :hover-search
-                          ; :search-path
+                          :search-guide
                           ; :solve-hover
-                          :brake-integrate
-                          :solve-brake-4)]
+                          ; :brake-integrate
+                          ; :solve-brake-4
+                          :hover-guide
+                          :hover-integrate
+                          )]
       (if (flags flag) (apply println args)))))
 
 (defn- debugln [& args] nil)
@@ -229,10 +232,10 @@
         (if (<= 0.0 tta) 
           (->Move :ok (move lc tta l) tta))))))
 
-(defn- hover-align-control [lander {section :section} ctl]
+(defn hover-align-control [{section :section :as stage} lander ctl]
   (loop [l lander t 0.0]
     (cond (not (over-line? l section)) nil ; FIXME: Теряем некоторые траектории  
-          (not (in-range? l section))  (->Move :out l t)   
+          (not (in-range? l section))  (if (constraint l stage) (->Move :out l t))   
           (= ctl (:control l))         (->Move :ok l t)
           :else                        (recur (move ctl 1.0 l) (+ 1.0 t)))))
 
@@ -245,24 +248,65 @@
               t-overall (+ t t-ceil)]
           (->Move :ok (move (:control l) t-ceil lander) t-overall))))))
 
+(defn hover-integrate-ok-one [{section :section :as stage} lander]
+  (if-let [m (solve-hover lander stage)]
+    (let [t (Math/ceil (:dt m))
+          l (move (:control lander) t lander)]
+      (if (and (constraint l stage)
+               (over-line? l section))
+        (->Move :ok l t)))))
+
 (defn- hover-out-integrate [moves]
   (map (fn [[k v]] (first v)) (group-by (comp :control :lander) moves)))
 
-(defn- hover-move-cloud [lander stage]
-  (let [aligned (group-by :state (keep (partial hover-align-control lander stage) control-cloud))]
+(defn- hover-move-cloud [stage lander]
+  (let [aligned (group-by :state (keep (partial hover-align-control stage lander) control-cloud))]
     (concat (keep (partial hover-ok-integrate-one stage) (:ok aligned))
             (hover-out-integrate (:out aligned)))))
 
+(defrecord ^:private HoverReduce [moves outs])
+
+(defn hover-integrate [stage lander control]
+  (if-let [ma (hover-align-control stage lander control)]
+    (case (:state ma)
+      :ok (if-let [mi (hover-integrate-ok-one stage (:lander ma))] (vector mi))
+      :out (vector ma))))
+
+(defn hover-cloud [stage lander]
+  (loop [outs (transient (hash-set)) moves (transient (vector)) controls control-cloud]
+    (if-not (empty? controls)
+      (do (if-let [m (hover-integrate stage lander (first controls))]
+            (let [fm (first m)]
+              (case (:state fm)
+                :ok  (conj! moves m)
+                :out (when-not (outs (:control (:lander fm)))
+                       (conj! moves m)
+                       (conj! outs (:control (:lander fm)))))))
+          (recur outs moves (rest controls))
+          )
+      (persistent! moves))))
+
 (declare search-guide)
 
-(defn- hover-guide [stage next-stages lander]
-  (loop [landers (map :lander (hover-move-cloud lander stage))]
+(defn- hover-guide-old [stage next-stages lander]
+  (loop [landers (map (comp :lander last) (hover-cloud stage lander))]
     (if-not (empty? landers)
       (let [{ctl :control :as l} (first landers)
             ctl-next (search-guide next-stages l)]
         (if ctl-next
           (cons ctl ctl-next)
           (recur (next landers)))))))
+
+(defn- hover-guide [stage next-stages lander]
+  (debugln :hover-guide \newline "stage:" stage \newline "lander:" lander)
+  (loop [controls (hover-cloud stage lander)]
+    (debugln :hover-guide (count controls))
+    (if-let [m (first controls)]
+      (do (debugln :hover-guide m \newline (:lander (last m)))
+          (let [m-next (search-guide next-stages (:lander (last m)))]
+            (if m-next
+              (cons m m-next)
+              (recur (next controls))))))))
 
 (defn- brake-align-control [lander {pad :pad} ctl]
   (loop [l lander t 0.0]
@@ -338,9 +382,10 @@
 (defn break-guide [stage lander] (list))
 
 (defn search-guide [stages ^Lander lander]
+  (debugln :search-guide "search guide" (:stage (first stages)))
   (if-let [s (first stages)]
     (case (:stage s)
-      :breaking (break-guide s lander)
+;      :breaking (break-guide s lander)
       :hover (hover-guide s (next stages) lander)
       (list))))
 
