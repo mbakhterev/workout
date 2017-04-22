@@ -96,4 +96,4 @@
   (reduce (partial hover-integrate stage lander) {:moves [] :outs #{}} control-cloud)
   )
 
-
+(time (search-guide stages i-lander))

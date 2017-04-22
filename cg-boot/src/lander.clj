@@ -45,10 +45,10 @@
                  ^Lander lander
                  ^double dt])
 
-(defn- control-to [f t]
+(defn- ^Control control-to [^Control f ^Control t]
   (let [angle-max-delta 15
         power-max-delta 1
-        tune-value (fn [current goal max-delta]
+        tune-value (fn [^long current ^long goal ^long max-delta]
                      (let [delta (- goal current)]
                        (cond (= 0 delta) goal
                              (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
@@ -62,19 +62,19 @@
 (let [M 3.711
       cos (fn [a] (Math/cos (Math/toRadians (+ 90 a))))
       sin (fn [a] (Math/sin (Math/toRadians (+ 90 a))))
-      x-force (fn [a p] (* p (cos a)))
-      y-force (fn [a p] (- (* p (sin a)) M))
+      x-force (fn ^double [a p] (* p (cos a)))
+      y-force (fn ^double [a p] (- (* p (sin a)) M))
       make-table (fn [f] (vec (for [p (range 0 5)] (vec (for [a (range -90 91)] (f a p))))))
       x-table (make-table x-force)
       y-table (make-table y-force)]
-  (defn- x-acceleration [a p] (nth (nth x-table p) (+ 90 a)))
-  (defn- y-acceleration [a p] (nth (nth y-table p) (+ 90 a))))
+  (defn- x-acceleration [^long a ^long p] ((x-table p) (+ 90 a)))
+  (defn- y-acceleration [^long a ^long p] ((y-table p) (+ 90 a))))
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
 ; модуля и то управление, которое привело его в это положение. Положение -
 ; вектор в фазовом пространстве (vec x y dx dy fuel)
  
-(defn move [tc t {lc :control :as l}] 
+(defn- ^Lander move [^Control tc ^double t ^Lander {lc :control fuel :fuel :as l}] 
   (assert (or (= 1.0 t) (= tc lc)))
 
   (let [{angle :angle power :power :as nc} (control-to lc tc)
@@ -93,24 +93,24 @@
 (let [power-cloud (range 0 5)
       angle-delta 5
       angle-cloud (range -90 91 angle-delta)]
-  (def ^:const control-cloud (for [p power-cloud a angle-cloud] (->Control a p))))
+  (def ^:const control-cloud (vec (for [p power-cloud a angle-cloud] (->Control a p)))))
 
 ; Проверки того, что модель над поверхностью Марса
 
-(defn- in-range? [{x :x} {ax :ax bx :bx}]
+(defn- in-range? [^Lander {x :x} ^geometry.Section {ax :ax bx :bx}]
   (and (<= ax x) (< x bx)))
 
-(defn- over-line? [{x :x y :y} {ax :ax ay :ay k :k}]
+(defn- over-line? [^Lander {x :x y :y} ^geometry.Section {ax :ax ay :ay k :k}]
   (let [min-height 32.0
         rx (- x ax)
         ry (- y ay)]
     (< (+ (* k rx) min-height) ry)))
 
-(defn over-section? [lander section]
+(defn- over-section? [^Lander lander ^geometry.Section section]
   (and (in-range? lander section)
        (over-line? lander section)))
 
-(defn alive? [surface {x :x y :y :as lander}]
+(defn alive? [^geometry.Section surface ^Lander {x :x y :y :as lander}]
   (let [x-max (- 7000.0 1.0)
         y-max (- 3000.0 1.0)]
     (and (<= 0 x x-max)
@@ -120,16 +120,14 @@
 ; Рассчёты для стадии последнего снижения: погашение вертикальной скорости с
 ; управлением (vec 0 4) 
 
-; (def ^:private ^:const max-vy 38.0)
-
-(defn- reserve [x r] (+ x (* x r)))
+(defn- reserve [^double x ^double r] (+ x (* x r)))
 
 ; Вычисляем разницу высот, на которой можем погасить vy, полагая, что управление
 ; уже (vec 0 4). Вычисления в обычной системе координат: Марс внизу. Если
 ; скорость такая, что гасить её не надо, нас это устраивает и мы отвечаем, что
 ; не нужна высота и время на сжигание топлива.
 
-(defn- descend-constraint [{vy :vy}]
+(defn- ^Constraint descend-constraint [^Lander {vy :vy}]
   (let [max-vy 38.0
         ve (- max-vy)
         ay (y-acceleration 0 4)
@@ -138,7 +136,7 @@
       (->Constraint 0.0 0.0 0.0)
       (->Constraint 0.0 (+ (* vy t) (* 0.5 ay ay t)) t))))
 
-(defn- brake-constraint [{vx :vx vy :vy} {left? :left?}]
+(defn- ^Constraint brake-constraint [^Lander {vx :vx vy :vy} ^Stage {left? :left?}]
   (let [xi (if left? 90 -90)
         ay (y-acceleration xi 4)
         ax (x-acceleration xi 4)
@@ -148,11 +146,8 @@
                     (+ (* vy t) (* 0.5 ay ay t))
                     t)))) 
 
-; (def ^:private ^:const h-constraint-reserve 0.125)
-; (def ^:private ^:const dx-constraint-reserve 0.125)
- 
-(defn- constraint [{x :x h :y fuel :fuel :as l}
-                   {xp :x-pad yp :y-pad left? :left? :as S}]
+(defn- constraint [^Lander {x :x h :y fuel :fuel :as l}
+                   ^Stage {xp :x-pad yp :y-pad left? :left? :as S}]
   (let [dh-reserve 0.125
         dx-reserve 0.125
         dc (descend-constraint l)
@@ -165,8 +160,8 @@
              (< yp hr)
              (< (* 4.0 (+ (:t bc) (:t dc))) fuel))))))
 
-(defn- braking-stage [{x :x vx :vx :as lander}
-                      {ax :ax ay :ay bx :bx :as pad}
+(defn- braking-stage [^Lander {x :x vx :vx :as lander}
+                      ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
                       stages]
   (if (and (= 0 vx) (in-range? lander pad))
     stages
@@ -174,8 +169,8 @@
           xp (if left? bx ax)]
       (cons (->Stage :braking left? pad pad xp xp ay nil) stages))))
 
-(defn- hover-stages [{x :x}
-                     {ax :ax ay :ay bx :bx :as pad}
+(defn- hover-stages [^Lander {x :x}
+                     ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
                      l-rock r-rock stages] 
   (let [on-left (fn [s] (if (< x (:bx s) bx) (->Stage :hover true s pad (:bx s) bx ay nil)))
         on-right (fn [s] (if (> x (:ax s) ax) (->Stage :hover false s pad (:ax s) ax ay nil)))]
@@ -183,9 +178,9 @@
                   (> x bx) (keep on-right (reverse r-rock)))
             stages)))
 
-(defn- reverse-stage [{x :x vx :vx :as lander}
-                          {ax :ax ay :ay bx :bx :as pad}
-                          l-rock r-rock stages]
+(defn- reverse-stage [^Lander {x :x vx :vx :as lander}
+                      ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+                      l-rock r-rock stages]
   (if-not (or (and (< x ax) (< vx 0.0))
               (and (> x bx) (> vx 0.0)))
     stages
@@ -198,7 +193,8 @@
       (cons (->Stage :reverse left? s pad (if left? (:bx s) (:ax s)) (if left? bx ax) ay surface)
             stages))))
 
-(defn- descend-stage [{x :x} {ax :ax ay :ay bx :bx :as pad}]
+(defn- descend-stage [^Lander {x :x}
+                      ^geometry.Section {ax :ax ay :ay bx :bx :as pad}]
   (let [left? (< x ax)
         xp (if left? bx ax)]
     (list (->Stage :descending left? pad pad xp xp ay nil))))
@@ -209,7 +205,7 @@
        (hover-stages l pad l-rock r-rock)
        (reverse-stage l pad l-rock r-rock)))
 
-(defn- solve-square-equation [a b c]
+(defn- ^Roots solve-square-equation [^double a ^double b ^double c]
   (if (= 0.0 a)
     (if (not= 0.0 b)
       (let [t (/ (- c) b)] (->Roots t t)))
@@ -222,8 +218,8 @@
               tm     (* (- (- b) D-sqrt) a-rcpr)]
           (->Roots (min tp tm) (max tp tm)))))))
 
-(defn solve-hover [{x :x vx :vx {a :angle p :power :as lc} :control :as l}
-                   {x-target :x-goal}]
+(defn- ^Move solve-hover [^Lander {x :x vx :vx ^Control {a :angle p :power :as lc} :control :as l}
+                   ^Stage {x-target :x-goal}]
   (let [ax (x-acceleration a p)
         r  (solve-square-equation (* 0.5 ax) vx (- x x-target))]
     (if r 
@@ -232,10 +228,10 @@
         (if (<= 0.0 tta) 
           (->Move :ok (move lc tta l) tta))))))
 
-(defn hover-align-control [{section :section :as stage} lander ctl]
+(defn- ^Move hover-align-control [^Stage {section :section :as stage} ^Lander lander ^Control ctl]
   (loop [l lander t 0.0]
-    (cond (not (over-line? l section)) nil ; FIXME: Теряем некоторые траектории  
-          (not (in-range? l section))  (if (constraint l stage) (->Move :out l t))   
+    (cond (not (over-line? l section)) (->Move :ko l 0.0)
+          (not (in-range? l section))  (if (constraint l stage) (->Move :out l t) (->Move :ko l 0.0))
           (= ctl (:control l))         (->Move :ok l t)
           :else                        (recur (move ctl 1.0 l) (+ 1.0 t)))))
 
@@ -248,7 +244,7 @@
               t-overall (+ t t-ceil)]
           (->Move :ok (move (:control l) t-ceil lander) t-overall))))))
 
-(defn hover-integrate-ok-one [{section :section :as stage} lander]
+(defn ^Move hover-integrate-ok-one [^Stage {section :section :as stage} ^Lander lander]
   (if-let [m (solve-hover lander stage)]
     (let [t (Math/ceil (:dt m))
           l (move (:control lander) t lander)]
@@ -269,8 +265,8 @@
 (defn hover-integrate [stage lander control]
   (if-let [ma (hover-align-control stage lander control)]
     (case (:state ma)
-      :ok (if-let [mi (hover-integrate-ok-one stage (:lander ma))] (vector mi))
-      :out (vector ma))))
+      :ok (if-let [mi (hover-integrate-ok-one stage (:lander ma))] (list mi))
+      :out (list ma))))
 
 (defn hover-cloud [stage lander]
   (loop [outs (transient (hash-set)) moves (transient (vector)) controls control-cloud]
@@ -295,7 +291,7 @@
             ctl-next (search-guide next-stages l)]
         (if ctl-next
           (cons ctl ctl-next)
-          (recur (next landers)))))))
+          (recur (rest landers)))))))
 
 (defn- hover-guide [stage next-stages lander]
   (debugln :hover-guide \newline "stage:" stage \newline "lander:" lander)
@@ -306,7 +302,7 @@
           (let [m-next (search-guide next-stages (:lander (last m)))]
             (if m-next
               (cons m m-next)
-              (recur (next controls))))))))
+              (recur (rest controls))))))))
 
 (defn- brake-align-control [lander {pad :pad} ctl]
   (loop [l lander t 0.0]
@@ -386,7 +382,7 @@
   (if-let [s (first stages)]
     (case (:stage s)
 ;      :breaking (break-guide s lander)
-      :hover (hover-guide s (next stages) lander)
+      :hover (hover-guide s (rest stages) lander)
       (list))))
 
 (defn model-hover [^Control control ^Stage stage ^Lander lander]
