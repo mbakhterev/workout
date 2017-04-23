@@ -36,6 +36,8 @@
 
 (def ^:private ^:const stages (detect-stages i-lander l-shell l-pad r-shell)) 
 
+; eval
+
 (let [guide-control (search-guide stages i-lander)]
   (def ^:private ^:const guide (model-control guide-control stages i-lander)))
 
@@ -80,7 +82,11 @@
 
 (hover-integrate-ok-one (first stages) i-lander)
 
-(hover-integrate (first stages) i-lander {:moves [] :outs #{}} (->Control -90 4))
+(hover-integrate (first stages) i-lander (->HoverReduce [] nil) (->Control -90 4))
+
+(time (map (comp :control :lander first) (filter (comp (partial = :out) :state first) (hover-cloud (first stages) i-lander))))
+(count (hover-cloud (first stages) i-lander))
+(count (map (comp :control :lander) (set (filter (comp (partial = :out) :state ) (map (partial hover-align-control (first stages) i-lander) control-cloud)))))
 
 (let [stage (first stages)
       lander i-lander
@@ -97,3 +103,9 @@
   )
 
 (time (search-guide stages i-lander))
+
+(map (partial hover-integrate (first stages) i-lander) (hover-control-cloud (first stages) i-lander))
+
+
+
+(count (hover-control-cloud (first stages) i-lander))
