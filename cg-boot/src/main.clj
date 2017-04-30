@@ -21,12 +21,9 @@
                                              4000 200 5000 200 5500 1500 6999 2800]
                                    :lander [500 2700 100 0 800 -90 0]}])
 
-(defn- make-lander [L] (apply ->Lander (conj (vec (take 5 L))
-                                             (apply ->Control (drop 5 L)))))
-
 (def ^:private ^:const test-id 0)
 (def ^:private ^:const s-points (surface-points (:surface (test-data test-id))))
-(def ^:private ^:const i-lander (make-lander (:lander (test-data test-id))))
+(def ^:private ^:const i-lander (load-lander (:lander (test-data test-id))))
 (def ^:private ^:const l-pad (find-landing-pad s-points))
 (def ^:private ^:const surface (surface-sections s-points))
 (let [[l r] (surface-shell s-points l-pad)]
@@ -102,10 +99,8 @@
   (reduce (partial hover-integrate stage lander) {:moves [] :outs #{}} control-cloud)
   )
 
-(time (search-guide stages i-lander))
+(doseq [i (range 4)] (time (search-guide stages i-lander)))
 
 (map (partial hover-integrate (first stages) i-lander) (hover-control-cloud (first stages) i-lander))
-
-
 
 (count (hover-control-cloud (first stages) i-lander))
