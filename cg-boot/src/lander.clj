@@ -23,10 +23,12 @@
                    ^double vx
                    ^double vy
                    ^long fuel
-                   ^Control control])
+                   ^long angle
+                   ^long power
+                   ^double dt
+                   state])
 
-(defn ^Lander load-lander [params]
-  (let [[m c] (split-at 5 params)] (apply ->Lander (conj (vec m) (apply ->Control c))))) 
+(defn ^Lander load-lander [params] (apply ->Lander (conj (vec params) 0.0 :ok))) 
 
 (defrecord Stage [stage
                   ^boolean left?
@@ -37,28 +39,30 @@
                   ^double y-pad
                   surface])
 
-(defrecord Constraint [^double dx 
-                       ^double dh
-                       ^double t])
+(comment (defrecord Constraint [^double dx 
+                                ^double dh
+                                ^double t])
 
-(defrecord Roots [^double left
-                  ^double right])
+         (defrecord Roots [^double left
+                           ^double right])
+
+         )
 
 (defrecord Move [state
-                 ^Lander lander
-                 ^double dt])
+                          ^Lander lander
+                          ^double dt])
 
 (def ^:private ^:const angle-max-delta 15)
 (def ^:private ^:const power-max-delta 1)
 
-(defn- control-to [^Control f ^Control t]
-  (let [tune-value (fn [^long current ^long goal ^long max-delta]
-                     (let [delta (- goal current)]
-                       (cond (= 0 delta) goal
-                             (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
-                             (> 0 delta) (if (> delta (- max-delta)) goal (- current max-delta)))))]
-    (->Control (tune-value (:angle f) (:angle t) angle-max-delta)
-               (tune-value (:power f) (:power t) power-max-delta))))
+(defn- tune-value [^long current ^long goal ^long max-delta]
+  (let [delta (- goal current)]
+    (cond (= 0 delta) goal
+          (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
+          (> 0 delta) (if (> delta (- max-delta)) goal (- current max-delta)))))
+
+(defn- control-match? [^long angle ^long power ^Lander l]
+  (and (= angle (:angle l)) (= power (:power l))))
 
 ; Таблица ускорений в зависимости от угла и мощности. В рассчёте учитываем, что
 ; угол задаётся от оси (+ PI/2)
@@ -78,19 +82,26 @@
 ; модуля и то управление, которое привело его в это положение. Положение -
 ; вектор в фазовом пространстве (vec x y dx dy fuel)
  
-(defn- move [^Control tc ^double t ^Lander {lc :control fuel :fuel :as l}] 
-  (assert (or (= 1.0 t) (= tc lc)))
+(defn- move [^long t-angle ^long t-power
+             ^double t
+             ^Lander {l-angle :angle l-power :power :as l}] 
+  (assert (or (= 1.0 t) (and (= t-angle l-angle)
+                             (= t-power l-power))))
 
-  (let [{angle :angle power :power :as nc} (control-to lc tc)
+  (let [angle (tune-value l-angle t-angle angle-max-delta)
+        power (tune-value l-power t-power power-max-delta)
         ax (x-acceleration angle power)
         ay (y-acceleration angle power)
-        {x :x y :y vx :vx vy :vy fuel :fuel} l]
+        {x :x y :y vx :vx vy :vy fuel :fuel lt :dt} l]
     (->Lander (+ x (* vx t) (* 0.5 ax t t))
               (+ y (* vy t) (* 0.5 ay t t))
               (+ vx (* ax t))
               (+ vy (* ay t))
               (- fuel (* power t))
-              nc)))
+              angle
+              power
+              (+ t lt)
+              :ok)))
 
 ; Облако возможных управлений
 
@@ -138,8 +149,8 @@
         ay (y-acceleration 0 4)
         t  (/ (- ve vy) ay)]
     (if (< t 0.0)
-      (->Constraint 0.0 0.0 0.0)
-      (->Constraint 0.0 (+ (* vy t) (* 0.5 ay ay t)) t))))
+      [0.0 0.0]
+      [(+ (* vy t) (* 0.5 ay ay t)) t])))
 
 (defn- brake-constraint [^Lander {vx :vx vy :vy} ^Stage {left? :left?}]
   (let [xi (if left? 90 -90)
@@ -147,23 +158,23 @@
         ax (x-acceleration xi 4)
         t  (/ (- vx) ax)]
     (if (<= 0.0 t)
-      (->Constraint (+ (* vx t) (* 0.5 ax ax t)) 
-                    (+ (* vy t) (* 0.5 ay ay t))
-                    t)))) 
+      [(+ (* vx t) (* 0.5 ax ax t)) 
+       (+ (* vy t) (* 0.5 ay ay t))
+       t]))) 
 
 (defn- constraint [^Lander {x :x h :y fuel :fuel :as l}
                    ^Stage {xp :x-pad yp :y-pad left? :left? :as S}]
-  (let [dh-reserve 0.125
-        dx-reserve 0.125
-        dc (descend-constraint l)
-        bc (brake-constraint l S)
-        x-cmp (if left? < >)]
-    (if (and dc bc)
-      (let [xr (+ x (reserve (:dx bc) dx-reserve))
-            hr (+ h (reserve (+ (:dh bc) (:dh dc)) dh-reserve))]
-        (and (x-cmp xr xp)
-             (< yp hr)
-             (< (* 4.0 (+ (:t bc) (:t dc))) fuel))))))
+  (if-let [bc (brake-constraint l S)]
+    (let [dh-reserve 0.125
+          dx-reserve 0.125
+          [bc-x bc-h bc-t] bc
+          [dc-h dc-t] (descend-constraint l)
+          x-cmp (if left? < >)
+          xr (+ x (reserve bc-x dx-reserve))
+          hr (+ h (reserve (+ bc-h dc-h) dh-reserve))]
+      (and (x-cmp xr xp)
+           (< yp hr)
+           (< (* 4.0 (+ bc-t dc-t)) fuel)))))
 
 (defn- braking-stage [^Lander {x :x vx :vx :as lander}
                       ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
@@ -210,19 +221,6 @@
        (hover-stages l pad l-rock r-rock)
        (reverse-stage l pad l-rock r-rock)))
 
-(comment (defn- solve-square-equation [^double a ^double b ^double c]
-  (if (= 0.0 a)
-    (if (not= 0.0 b)
-      (let [t (/ (- c) b)] (->Roots t t)))
-    
-    (let [D (- (* b b) (* 4.0 a c))]
-      (if (<= 0.0 D)
-        (let [D-sqrt (Math/sqrt D)
-              a-rcpr (/ (* 2.0 a))
-              tp     (* (+ (- b) D-sqrt) a-rcpr)
-              tm     (* (- (- b) D-sqrt) a-rcpr)]
-          (->Roots (min tp tm) (max tp tm))))))))
-
 (defn- solve-square-equation [^double a ^double b ^double c]
   (if (= 0.0 a)
     (if (not= 0.0 b)
@@ -236,108 +234,56 @@
               tm     (* (- (- b) D-sqrt) a-rcpr)]
           [(min tp tm) (max tp tm)])))))
 
-(comment (defn- solve-hover [^Lander {x :x vx :vx ^Control {a :angle p :power :as lc} :control :as l}
-                   ^Stage {x-target :x-goal}]
+(defn- solve-hover [^Lander {x :x vx :vx a :angle p :power :as l}
+                    ^Stage {x-target :x-goal}]
   (let [ax (x-acceleration a p)
         r  (solve-square-equation (* 0.5 ax) vx (- x x-target))]
     (if r 
       (let [[tl tr] r
             tta (if (<= 0.0 tl) tl tr)]
         (if (<= 0.0 tta) 
-          (->Move :ok (move lc tta l) tta)))))))
+          (move a p (Math/ceil tta) l))))))
 
-(defn- solve-hover [^Lander {x :x vx :vx ^Control {a :angle p :power :as lc} :control :as l}
-                   ^Stage {x-target :x-goal}]
-  (let [ax (x-acceleration a p)
-        r  (solve-square-equation (* 0.5 ax) vx (- x x-target))]
-    (if r 
-      (let [[tl tr] r
-            tta (if (<= 0.0 tl) tl tr)]
-        (if (<= 0.0 tta) 
-          (->Move :ok (move lc (Math/ceil tta) l) tta))))))
-
-(defn hover-align-control [^Stage {section :section :as stage} ^Lander lander ^Control ctl]
-  (loop [l lander t 0.0]
-    (cond (not (over-line? l section)) (->Move :ko l 0.0)
-          (not (in-range? l section))  (if (constraint l stage) (->Move :out l t) (->Move :ko l 0.0))
-          (= ctl (:control l))         (->Move :ok l t)
-          :else                        (recur (move ctl 1.0 l) (+ 1.0 t)))))
-
-(comment (defn ^Move hover-integrate-ok-one [^Stage {section :section :as stage} ^Lander lander]
-  (if-let [m (solve-hover lander stage)]
-    (let [t (Math/ceil (:dt m))
-          l (move (:control lander) t lander)]
-      (if (and (constraint l stage)
-               (over-line? l section))
-        (->Move :ok l t))))))
+(defn hover-align-control [^Stage {section :section :as stage} ^Lander lander ^long angle ^long power]
+  (loop [l (assoc lander :dt 0.0)]
+    (cond (not (over-line? l section))   (assoc l :state :ko)
+          (not (in-range? l section))    (if (constraint l stage) (assoc l :state :out) (assoc l :state :ko))
+          (control-match? angle power l) l
+          :else                          (recur (move angle power 1.0 l)))))
 
 (defn hover-integrate-ok-one [^Stage {section :section :as stage} ^Lander lander]
-  (if-let [m (solve-hover lander stage)]
-    (let [l (:lander m)]
-      (if (and (constraint l stage)
-               (over-line? l section))
-        m))))
-
-(defrecord HoverReduce [moves ^Control cut-off])
-
-(defn- control-between [^Control {aa :angle ap :power}
-                        ^Control {ba :angle bp :power}
-                        ^Control {ca :angle cp :power}]
-  (let [between (fn [^long a ^long b ^long c] (<= 0 (* (- b a) (- c b))))]
-    (and (between aa ba ca)
-         (between ap bp cp))))
-
-(defn hover-integrate-old [^Stage stage
-                       ^Lander {lc :control :as lander}
-                       ^HoverReduce {moves :moves cut-off :cut-off :as R}
-                       ^Control control]
-  (if (and cut-off (control-between lc cut-off control))
-    R
-    (let [{state :state l :lander :as ma} (hover-align-control stage lander control)]
-      (case state
-        :ko (assoc R :cut-off (:control l))
-        :ok (if-let [mi (hover-integrate-ok-one stage (:lander ma))] (->HoverReduce (conj moves (list mi ma)) nil))
-        :out (->HoverReduce (conj moves (list ma)) (:control l))))))
+  (if-let [l (solve-hover (assoc lander :dt 0.0) stage)]
+    (and (constraint l stage)
+         (over-line? l section)
+         l)))
 
 (defn hover-integrate [^Stage stage
                         ^Lander lander
-                        ^Control control]
-  (let [{state :state l :lander :as ma} (hover-align-control stage lander control)]
+                        ^long angle ^long power]
+  (let [{state :state :as la} (hover-align-control stage lander angle power)]
     (case state
       :ko nil
-      :ok (if-let [mi (hover-integrate-ok-one stage (:lander ma))] (list mi ma))
-      :out (list ma))))
-
-(defn hover-control-cloud [^Stage stage ^Lander lander]
-  (for [p (range 0 5)
-        :let [a-left (-> (hover-align-control stage lander (->Control -90 p)) :lander :control :angle)
-              a-right (-> (hover-align-control stage lander (->Control 90 p)) :lander :control :angle)]
-        a (range a-left (+ a-right 1) angle-delta)]
-    (->Control a p)))
+      :ok (if-let [li (hover-integrate-ok-one stage la)] (list li la))
+      :out (list la))))
 
 (defn hover-cloud [^Stage stage ^Lander lander]
-  (:moves (reduce (partial hover-integrate stage lander) (->HoverReduce (vector) nil) control-cloud)))
+  (keep identity (for [p (range 0 5)
+                       a (let [a-left (:angle (hover-align-control stage lander -90 p))
+                               a-right (:angle (hover-align-control stage lander 90 p))]
+                           (if-not (:left? stage)
+                             (range a-left (+ a-right 1) angle-delta)
+                             (range a-right (- a-left 1) (- angle-delta))))]
+                   (hover-integrate stage lander a p))))
 
 (declare search-guide)
 
-(defn- hover-guide-old [^Stage stage next-stages ^Lander lander]
-  (debugln :hover-guide \newline "stage:" stage \newline "lander:" lander)
-  (loop [controls (hover-cloud stage lander)]
-    (debugln :hover-guide (count controls))
-    (when-first [m controls]
-      (debugln :hover-guide m \newline (:lander (first m)))
-      (let [m-next (search-guide next-stages (:lander (first m)))]
-        (if m-next
-          (cons m m-next)
-          (recur (next controls)))))))
-
 (defn hover-guide [^Stage stage next-stages ^Lander lander]
-  (loop [controls (keep (partial hover-integrate stage lander) (hover-control-cloud stage lander))]
-    (when-first [m controls]
-      (debugln :hover-guide m)
-      (if-let [m-next (search-guide next-stages (:lander (first m)))]
-        (cons m m-next)
-        (recur (next controls))))))
+  (loop [cloud (hover-cloud stage lander)]
+    (when-first [l cloud]
+      (debugln :hover-guide l)
+      (if-let [l-next (search-guide next-stages (first l))]
+        (cons l l-next)
+        (recur (next cloud))))))
 
 (defn- brake-align-control [lander {pad :pad} ctl]
   (loop [l lander t 0.0]

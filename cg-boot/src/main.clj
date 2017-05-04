@@ -96,11 +96,12 @@
 (let [lander #lander.Lander{:x 1000.0, :y 2653.6125, :vx 100.0, :vy -18.555, :fuel 800, :control #lander.Control{:angle -90, :power 0}}
       stage (second stages)
       ctl (->Control -15 3)]
-  (reduce (partial hover-integrate stage lander) {:moves [] :outs #{}} control-cloud)
-  )
+  (reduce (partial hover-integrate stage lander) {:moves [] :outs #{}} control-cloud))
 
 (doseq [i (range 4)] (time (search-guide stages i-lander)))
 
 (map (partial hover-integrate (first stages) i-lander) (hover-control-cloud (first stages) i-lander))
 
 (count (hover-control-cloud (first stages) i-lander))
+
+(count (hover-cloud (first stages) i-lander))
