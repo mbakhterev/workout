@@ -36,7 +36,7 @@
                   ^double y-pad
                   surface])
 
-(defrecord Constraint [^double dx ^double dh ^double t])
+(defrecord Constraint [^double x ^double h ^double t])
 
 (defrecord Roots [^double left ^double right])
 
@@ -134,8 +134,8 @@
         ay (y-acceleration 0 4)
         t  (/ (- ve vy) ay)]
     (if (< t 0.0)
-      [0.0 0.0]
-      [(+ (* vy t) (* 0.5 ay ay t)) t])))
+      (->Constraint 0.0 0.0 0.0)
+      (->Constraint 0.0 (+ (* vy t) (* 0.5 ay ay t)) t))))
 
 (defn- brake-constraint [^Lander {vx :vx vy :vy} ^Stage {left? :left?}]
   (let [xi (if left? 90 -90)
@@ -143,23 +143,22 @@
         ax (x-acceleration xi 4)
         t  (/ (- vx) ax)]
     (if (<= 0.0 t)
-      [(+ (* vx t) (* 0.5 ax ax t)) 
-       (+ (* vy t) (* 0.5 ay ay t))
-       t]))) 
+      (->Constraint (+ (* vx t) (* 0.5 ax ax t)) 
+                    (+ (* vy t) (* 0.5 ay ay t))
+                    t)))) 
 
 (defn- constraint [^Lander {x :x h :y fuel :fuel :as l}
                    ^Stage {xp :x-pad yp :y-pad left? :left? :as S}]
   (if-let [bc (brake-constraint l S)]
     (let [dh-reserve 0.125
           dx-reserve 0.125
-          [bc-x bc-h bc-t] bc
-          [dc-h dc-t] (descend-constraint l)
+          dc (descend-constraint l)
           x-cmp (if left? < >)
-          xr (+ x (reserve bc-x dx-reserve))
-          hr (+ h (reserve (+ bc-h dc-h) dh-reserve))]
+          xr (+ x (reserve (:x bc) dx-reserve))
+          hr (+ h (reserve (+ (:h bc) (:h dc)) dh-reserve))]
       (and (x-cmp xr xp)
            (< yp hr)
-           (< (* 4.0 (+ bc-t dc-t)) fuel)))))
+           (< (* 4.0 (+ (:t bc) (:t dc))) fuel)))))
 
 (defn- braking-stage [^Lander {x :x vx :vx :as lander}
                       ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
@@ -209,7 +208,7 @@
 (defn- solve-square-equation [^double a ^double b ^double c]
   (if (= 0.0 a)
     (if (not= 0.0 b)
-      (let [t (/ (- c) b)] [t t]))
+      (let [t (/ (- c) b)] (->Roots t t)))
     
     (let [D (- (* b b) (* 4.0 a c))]
       (if (<= 0.0 D)
@@ -217,57 +216,57 @@
               a-rcpr (/ (* 2.0 a))
               tp     (* (+ (- b) D-sqrt) a-rcpr)
               tm     (* (- (- b) D-sqrt) a-rcpr)]
-          [(min tp tm) (max tp tm)])))))
+          (->Roots (min tp tm) (max tp tm)))))))
 
-(defn- solve-hover [^Lander {x :x vx :vx a :angle p :power :as l}
+(defn- solve-hover [^Lander {x :x vx :vx {a :angle p :power :as ctl} :control :as l}
                     ^Stage {x-target :x-goal}]
   (let [ax (x-acceleration a p)
         r  (solve-square-equation (* 0.5 ax) vx (- x x-target))]
     (if r 
-      (let [[tl tr] r
-            tta (if (<= 0.0 tl) tl tr)]
-        (if (<= 0.0 tta) 
-          (move a p (Math/ceil tta) l))))))
+      (let [{tl :left tr :right} r
+            tm (Math/ceil (if (<= 0.0 tl) tl tr))]
+        (if (<= 0.0 tm) 
+          (->Move :ok (move ctl tm l) tm))))))
 
-(defn hover-align-control [^Stage {section :section :as stage} ^Lander lander ^long angle ^long power]
-  (loop [l (assoc lander :dt 0.0)]
-    (cond (not (over-line? l section))   (assoc l :state :ko)
-          (not (in-range? l section))    (if (constraint l stage) (assoc l :state :out) (assoc l :state :ko))
-          (control-match? angle power l) l
-          :else                          (recur (move angle power 1.0 l)))))
+(defn- hover-align-control [^Stage {section :section :as stage} ^Lander lander ^Control ctl]
+  (loop [l lander t 0.0]
+    (cond (not (over-line? l section)) (->Move :ko l 0.0)
+          (not (in-range? l section))  (if (constraint l stage) (->Move :out l t)  (->Move :ko l 0.0))
+          (= ctl (:control l))         (->Move :ok l t)
+          :else                        (recur (move ctl 1.0 l) (+ 1.0 t)))))
 
-(defn hover-integrate-ok-one [^Stage {section :section :as stage} ^Lander lander]
-  (if-let [l (solve-hover (assoc lander :dt 0.0) stage)]
-    (and (constraint l stage)
-         (over-line? l section)
-         l)))
+(defn- hover-integrate-ok-one [^Stage {section :section :as stage} ^Lander lander]
+  (if-let [m (solve-hover lander stage)]
+    (and (constraint (:lander m) stage)
+         (over-line? (:lander m) section)
+         m)))
 
-(defn hover-integrate [^Stage stage
-                        ^Lander lander
-                        ^long angle ^long power]
-  (let [{state :state :as la} (hover-align-control stage lander angle power)]
+(defn- hover-integrate [^Stage stage
+                       ^Lander lander
+                       ^Control ctl]
+  (let [{state :state :as ma} (hover-align-control stage lander ctl)]
     (case state
       :ko nil
-      :ok (if-let [li (hover-integrate-ok-one stage la)] (list li la))
-      :out (list la))))
+      :ok (if-let [mi (hover-integrate-ok-one stage (:lander ma))] (list mi ma))
+      :out (list ma))))
 
-(defn hover-cloud [^Stage stage ^Lander lander]
-  (keep identity (for [p (range 0 5)
-                       a (let [a-left (:angle (hover-align-control stage lander -90 p))
-                               a-right (:angle (hover-align-control stage lander 90 p))]
-                           (if-not (:left? stage)
-                             (range a-left (+ a-right 1) angle-delta)
-                             (range a-right (- a-left 1) (- angle-delta))))]
-                   (hover-integrate stage lander a p))))
+(defn- hover-control-cloud [^Stage stage ^Lander lander]
+  (for [p (range 0 5)
+        a (let [a-left (:angle (:control (:lander (hover-align-control stage lander (->Control -90 p)))))
+                a-right (:angle (:control (:lander (hover-align-control stage lander (->Control 90 p)))))]
+            (if-not (:left? stage)
+              (range a-left (+ a-right 1) angle-delta)
+              (range a-right (- a-left 1) (- angle-delta))))]
+    (->Control a p)))
 
 (declare search-guide)
 
-(defn hover-guide [^Stage stage next-stages ^Lander lander]
-  (loop [cloud (hover-cloud stage lander)]
-    (when-first [l cloud]
-      (debugln :hover-guide l)
-      (if-let [l-next (search-guide next-stages (first l))]
-        (cons l l-next)
+(defn- hover-guide [^Stage stage next-stages ^Lander lander]
+  (loop [cloud (keep (partial hover-integrate stage lander) (hover-control-cloud stage lander))]
+    (when-first [m cloud]
+      (debugln :hover-guide m)
+      (if-let [m-next (search-guide next-stages (:lander (first m)))]
+        (cons m m-next)
         (recur (next cloud))))))
 
 (defn- brake-align-control [lander {pad :pad} ctl]
@@ -351,17 +350,25 @@
       :hover (hover-guide s (rest stages) lander)
       (list))))
 
-(defn model-hover [^Control control ^Stage stage ^Lander lander]
-  (let [x-goal (:x-goal stage)
-        ctl-move (partial move control 1.0)
-        on-stage? (if (:left? stage)
-                    (fn [l] (< (:x l) x-goal))
-                    (fn [l] (>= (:x l) x-goal)))]
-    (loop [l (ctl-move lander) L [lander]]
-      (if (on-stage? l)
-        (recur (ctl-move l) (conj L l))
-        (conj L l)))))
+(comment (defn model-hover [^Control control ^Stage stage ^Lander lander]
+           (let [x-goal (:x-goal stage)
+                 ctl-move (partial move control 1.0)
+                 on-stage? (if (:left? stage)
+                             (fn [l] (< (:x l) x-goal))
+                             (fn [l] (>= (:x l) x-goal)))]
+             (loop [l (ctl-move lander) L [lander]]
+               (if (on-stage? l)
+                 (recur (ctl-move l) (conj L l))
+                 (conj L l)))))
 
-(defn model-control [controls stages ^Lander lander]
-  (->> (map list stages controls)
-       (reductions (fn [trace [s c]] (model-hover c s (last trace))) [lander])))
+         (defn model-control [controls stages ^Lander lander]
+           (->> (map list stages controls)
+                (reductions (fn [trace [s c]] (model-hover c s (last trace))) [lander]))))
+
+(defn model-control [guide lander]
+  (letfn [(do-control [moves l]
+            (when-first [{{ctl :control} :lander t :dt} moves]
+              (let [landers (take (+ 1 t) (iterate (partial move ctl 1.0) l))]
+                (cons landers
+                      (do-control (next moves) (last landers))))))]
+    (do-control (mapcat reverse guide) lander)))

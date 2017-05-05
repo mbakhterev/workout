@@ -33,7 +33,12 @@
 
 (def ^:private ^:const stages (detect-stages i-lander l-shell l-pad r-shell)) 
 
+(def ^:private ^:const guide-controls (search-guide stages i-lander))
+
 ; eval
+
+(model-control guide-controls i-lander)
+(identity guide-controls)
 
 (let [guide-control (search-guide stages i-lander)]
   (def ^:private ^:const guide (model-control guide-control stages i-lander)))
@@ -55,7 +60,7 @@
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell) 
 
-(r/update-scene :traces (model-control (search-guide stages i-lander) stages i-lander))
+(r/update-scene :traces (model-control guide-controls i-lander))
 
 (comment (count (keep (fn [[k v]] (if true [k (count (set v))]))
                       (group-by (comp :control :lander)
@@ -109,3 +114,5 @@
 (count (hover-cloud (first stages) i-lander))
 
 (identity i-lander)
+
+(model-control (search-guide stages i-lander) i-lander)
