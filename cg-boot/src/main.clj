@@ -41,11 +41,13 @@
 (def ^:private ^:const bad-cases
   [{:C (->Control 60 4)
     :S (nth stages 2) 
-    :L #lander.Lander{:x 1500.0, :y 2514.4499999999994, :vx 100.0, :vy -37.10999999999999, :fuel 800, :control #lander.Control{:angle -15, :power 0}}}
+    :L #lander.Lander{:x 1500.0, :y 2514.4499999999994, :vx 100.0, :vy -37.10999999999999, :fuel 800,
+                      :control #lander.Control{:angle -15, :power 0}}}
    
    {:C (->Control 20 4)
     :S (nth stages 2)
-    :L #lander.Lander{:x 1500.3393543299987, :y 2529.3060059296076, :vx 99.64872884586892, :vy -27.17071128706871, :fuel 790, :control #lander.Control{:angle 5, :power 4}}}])
+    :L #lander.Lander{:x 1500.3393543299987, :y 2529.3060059296076, :vx 99.64872884586892, :vy -27.17071128706871, :fuel 790,
+                      :control #lander.Control{:angle 5, :power 4}}}])
  
 (def ^:private ^:const bad (nth bad-cases 1))
 
@@ -105,3 +107,5 @@
 (count (hover-control-cloud (first stages) i-lander))
 
 (count (hover-cloud (first stages) i-lander))
+
+(identity i-lander)

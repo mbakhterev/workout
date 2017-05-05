@@ -23,12 +23,9 @@
                    ^double vx
                    ^double vy
                    ^long fuel
-                   ^long angle
-                   ^long power
-                   ^double dt
-                   state])
+                   ^Control control])
 
-(defn ^Lander load-lander [params] (apply ->Lander (conj (vec params) 0.0 :ok))) 
+(defn ^Lander load-lander [nums] (let [[m c] (split-at 5 nums)] (apply ->Lander (conj (vec m) (apply ->Control c))))) 
 
 (defrecord Stage [stage
                   ^boolean left?
@@ -39,30 +36,23 @@
                   ^double y-pad
                   surface])
 
-(comment (defrecord Constraint [^double dx 
-                                ^double dh
-                                ^double t])
+(defrecord Constraint [^double dx ^double dh ^double t])
 
-         (defrecord Roots [^double left
-                           ^double right])
+(defrecord Roots [^double left ^double right])
 
-         )
+(defrecord Move [state ^Lander lander ^double dt])
 
-(defrecord Move [state
-                          ^Lander lander
-                          ^double dt])
+(defn- control-to [^Control f ^Control t]
+  (let [angle-max-delta 15
+        power-max-delta 1
 
-(def ^:private ^:const angle-max-delta 15)
-(def ^:private ^:const power-max-delta 1)
-
-(defn- tune-value [^long current ^long goal ^long max-delta]
-  (let [delta (- goal current)]
-    (cond (= 0 delta) goal
-          (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
-          (> 0 delta) (if (> delta (- max-delta)) goal (- current max-delta)))))
-
-(defn- control-match? [^long angle ^long power ^Lander l]
-  (and (= angle (:angle l)) (= power (:power l))))
+        tune-value (fn [^long current ^long goal ^long max-delta]
+                     (let [delta (- goal current)]
+                       (cond (= 0 delta) goal
+                             (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
+                             (> 0 delta) (if (> delta (- max-delta)) goal (- current max-delta)))))]
+    (->Control (tune-value (:angle f) (:angle t) angle-max-delta)
+               (tune-value (:power f) (:power t) power-max-delta))))
 
 ; Таблица ускорений в зависимости от угла и мощности. В рассчёте учитываем, что
 ; угол задаётся от оси (+ PI/2)
@@ -82,14 +72,12 @@
 ; модуля и то управление, которое привело его в это положение. Положение -
 ; вектор в фазовом пространстве (vec x y dx dy fuel)
  
-(defn- move [^long t-angle ^long t-power
+(defn- move [^Control ctl
              ^double t
-             ^Lander {l-angle :angle l-power :power :as l}] 
-  (assert (or (= 1.0 t) (and (= t-angle l-angle)
-                             (= t-power l-power))))
+             ^Lander {lc :control :as l}] 
+  (assert (or (= 1.0 t) (= lc ctl)))
 
-  (let [angle (tune-value l-angle t-angle angle-max-delta)
-        power (tune-value l-power t-power power-max-delta)
+  (let [{angle :angle power :power :as nc} (control-to lc ctl)
         ax (x-acceleration angle power)
         ay (y-acceleration angle power)
         {x :x y :y vx :vx vy :vy fuel :fuel lt :dt} l]
@@ -98,10 +86,7 @@
               (+ vx (* ax t))
               (+ vy (* ay t))
               (- fuel (* power t))
-              angle
-              power
-              (+ t lt)
-              :ok)))
+              nc)))
 
 ; Облако возможных управлений
 
