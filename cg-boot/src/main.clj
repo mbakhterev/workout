@@ -37,11 +37,11 @@
 
 ; eval
 
-(model-control guide-controls i-lander)
-(identity guide-controls)
+(r/update-scene :surface surface)
+(r/update-scene :landing-pad l-pad)
+(r/update-scene :shell shell) 
 
-(let [guide-control (search-guide stages i-lander)]
-  (def ^:private ^:const guide (model-control guide-control stages i-lander)))
+(r/update-scene :traces (model-control guide-controls i-lander))
 
 (def ^:private ^:const bad-cases
   [{:C (->Control 60 4)
@@ -53,66 +53,7 @@
     :S (nth stages 2)
     :L #lander.Lander{:x 1500.3393543299987, :y 2529.3060059296076, :vx 99.64872884586892, :vy -27.17071128706871, :fuel 790,
                       :control #lander.Control{:angle 5, :power 4}}}])
- 
-(def ^:private ^:const bad (nth bad-cases 1))
 
-(r/update-scene :surface surface)
-(r/update-scene :landing-pad l-pad)
-(r/update-scene :shell shell) 
-
-(r/update-scene :traces (model-control guide-controls i-lander))
-
-(comment (count (keep (fn [[k v]] (if true [k (count (set v))]))
-                      (group-by (comp :control :lander)
-                                (:ok (group-by :state (keep (partial align-control (:L bad) (:S bad)) control-cloud))))))
-
-         (count (hover-move-cloud i-lander (first stages)))
-
-         (time (search-guide stages i-lander))
-         (search-guide (drop 2 stages) (:L bad)))
-
-(def ^:private ^:const d-lander (last (last guide)))
-(def ^:private ^:const brk-stage (first (filter (comp (partial = :braking) :stage) stages)))
-
-(let [d-lander (last (last guide))
-      brk-stage (first (filter (comp (partial = :braking) :stage) stages))]
-  (keep (partial brake-integrate brk-stage d-lander) control-cloud))
+(def ^:private ^:const bad (nth bad-cases 1)) 
 
 (map :stage stages)
-
-(:lander (last (first (hover-cloud (first stages) i-lander))))
-
-(hover-align-control (first stages) i-lander (->Control -90 4))
-
-(hover-integrate-ok-one (first stages) i-lander)
-
-(hover-integrate (first stages) i-lander (->HoverReduce [] nil) (->Control -90 4))
-
-(time (map (comp :control :lander first) (filter (comp (partial = :out) :state first) (hover-cloud (first stages) i-lander))))
-(count (hover-cloud (first stages) i-lander))
-(count (map (comp :control :lander) (set (filter (comp (partial = :out) :state ) (map (partial hover-align-control (first stages) i-lander) control-cloud)))))
-
-(let [stage (first stages)
-      lander i-lander
-      ctl (->Control -90 4)
-      ma (hover-align-control stage )
-      ])
-
-(time (search-guide stages i-lander))
-
-(let [lander #lander.Lander{:x 1000.0, :y 2653.6125, :vx 100.0, :vy -18.555, :fuel 800, :control #lander.Control{:angle -90, :power 0}}
-      stage (second stages)
-      ctl (->Control -15 3)]
-  (reduce (partial hover-integrate stage lander) {:moves [] :outs #{}} control-cloud))
-
-(doseq [i (range 4)] (time (search-guide stages i-lander)))
-
-(map (partial hover-integrate (first stages) i-lander) (hover-control-cloud (first stages) i-lander))
-
-(count (hover-control-cloud (first stages) i-lander))
-
-(count (hover-cloud (first stages) i-lander))
-
-(identity i-lander)
-
-(model-control (search-guide stages i-lander) i-lander)

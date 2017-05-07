@@ -25,7 +25,8 @@
                    ^long fuel
                    ^Control control])
 
-(defn ^Lander load-lander [nums] (let [[m c] (split-at 5 nums)] (apply ->Lander (conj (vec m) (apply ->Control c))))) 
+(defn load-lander [nums]
+  (let [[m c] (split-at 5 nums)] (apply ->Lander (conj (vec m) (apply ->Control c))))) 
 
 (defrecord Stage [stage
                   ^boolean left?
@@ -88,15 +89,7 @@
               (- fuel (* power t))
               nc)))
 
-; Облако возможных управлений
-
-(def ^:const ^:power angle-delta 5)
-
-(let [power-cloud (range 0 5)
-      angle-cloud (range -90 91 angle-delta)]
-  (def ^:const control-cloud (vec (for [p power-cloud a angle-cloud] (->Control a p)))))
-
-; Проверки того, что модель над поверхностью Марса
+; Проверки того, что модуль над поверхностью Марса
 
 (defn- in-range? [^Lander {x :x} ^geometry.Section {ax :ax bx :bx}]
   (and (<= ax x) (< x bx)))
@@ -117,6 +110,20 @@
     (and (<= 0 x x-max)
          (<= 0 y y-max)
          (over-line? lander (first (filter (partial in-range? lander) surface))))))
+
+(define ((type (lambda (Lander geometry.Section) bool) alive?) lander section)
+  (let ((x-max (- 7000.0 1.0))
+        (y-max (- 3000.0 1.0)))
+    (and (<= 0 x x-max)
+         (<= 0 y y-max)
+         (over-line? lander (head (filter (partial in-range? lander)) surface)))))
+
+(define ((type (lambda Lander geometry.Section bool) alive?) lander section)
+  (let x-max (-7000.0 1.0)
+       y-max (-3000.0 1.0)
+    (and (<= 0 x x-max)
+         (<= 0 y y-max)
+         (over-line? lander (head (filter (partial in-range? lander) surface))))))
 
 ; Рассчёты для стадии последнего снижения: погашение вертикальной скорости с
 ; управлением (vec 0 4) 
@@ -160,9 +167,9 @@
            (< yp hr)
            (< (* 4.0 (+ (:t bc) (:t dc))) fuel)))))
 
-(defn- braking-stage [^Lander {x :x vx :vx :as lander}
-                      ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
-                      stages]
+(defn- brake-stage [^Lander {x :x vx :vx :as lander}
+                    ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+                    stages]
   (if (and (= 0 vx) (in-range? lander pad))
     stages
     (let [left? (or (< x ax) (< 0.0 vx))
@@ -197,11 +204,11 @@
                       ^geometry.Section {ax :ax ay :ay bx :bx :as pad}]
   (let [left? (< x ax)
         xp (if left? bx ax)]
-    (list (->Stage :descending left? pad pad xp xp ay nil))))
+    (list (->Stage :descend left? pad pad xp xp ay nil))))
 
 (defn detect-stages [l l-rock pad r-rock]
   (->> (descend-stage l pad)
-       (braking-stage l pad)
+       (brake-stage l pad)
        (hover-stages l pad l-rock r-rock)
        (reverse-stage l pad l-rock r-rock)))
 
@@ -249,6 +256,10 @@
       :ko nil
       :ok (if-let [mi (hover-integrate-ok-one stage (:lander ma))] (list mi ma))
       :out (list ma))))
+
+; Облако возможных управлений на стадии hover
+
+(def ^:const ^:private angle-delta 5) 
 
 (defn- hover-control-cloud [^Stage stage ^Lander lander]
   (for [p (range 0 5)
@@ -338,7 +349,7 @@
                                   hr (+ (:y lander) (reserve (:dh dc) dh-reserve))]
                               (if (and (< (:ay pad) hr)
                                        (< (* 4.0 (:t dc)) (:fuel (:lander m-4))))
-                                [m-1 m-2 m-3 m-4])))))))))))) 
+                                (list m-4 m-3 m-2 m-1))))))))))))) 
 
 (defn break-guide [stage lander] (list))
 
@@ -346,24 +357,10 @@
   (debugln :search-guide "search guide" (:stage (first stages)))
   (if-let [s (first stages)]
     (case (:stage s)
-;      :breaking (break-guide s lander)
+      :brake (break-guide s (rest stages) lander)
       :hover (hover-guide s (rest stages) lander)
+      :descend (descend-guide s lander)
       (list))))
-
-(comment (defn model-hover [^Control control ^Stage stage ^Lander lander]
-           (let [x-goal (:x-goal stage)
-                 ctl-move (partial move control 1.0)
-                 on-stage? (if (:left? stage)
-                             (fn [l] (< (:x l) x-goal))
-                             (fn [l] (>= (:x l) x-goal)))]
-             (loop [l (ctl-move lander) L [lander]]
-               (if (on-stage? l)
-                 (recur (ctl-move l) (conj L l))
-                 (conj L l)))))
-
-         (defn model-control [controls stages ^Lander lander]
-           (->> (map list stages controls)
-                (reductions (fn [trace [s c]] (model-hover c s (last trace))) [lander]))))
 
 (defn model-control [guide lander]
   (letfn [(do-control [moves l]
