@@ -5,12 +5,12 @@
 (comment
   (defn- debugln [flag & args]
     (let [flags (hash-set ; :hover-search
-                          :search-guide
+                          ; :search-guide
                           ; :solve-hover
-                          ; :brake-integrate
+                          :brake-integrate
                           ; :solve-brake-4
-                          :hover-guide
-                          :hover-integrate
+                          ; :hover-guide
+                          ; :hover-integrate
                           )]
       (if (flags flag) (apply println args)))))
 
@@ -46,7 +46,6 @@
 (defn- control-to [^Control f ^Control t]
   (let [angle-max-delta 15
         power-max-delta 1
-
         tune-value (fn [^long current ^long goal ^long max-delta]
                      (let [delta (- goal current)]
                        (cond (= 0 delta) goal
@@ -77,7 +76,6 @@
              ^double t
              ^Lander {lc :control :as l}] 
   (assert (or (= 1.0 t) (= lc ctl)))
-
   (let [{angle :angle power :power :as nc} (control-to lc ctl)
         ax (x-acceleration angle power)
         ay (y-acceleration angle power)
@@ -111,20 +109,6 @@
          (<= 0 y y-max)
          (over-line? lander (first (filter (partial in-range? lander) surface))))))
 
-(define ((type (lambda (Lander geometry.Section) bool) alive?) lander section)
-  (let ((x-max (- 7000.0 1.0))
-        (y-max (- 3000.0 1.0)))
-    (and (<= 0 x x-max)
-         (<= 0 y y-max)
-         (over-line? lander (head (filter (partial in-range? lander)) surface)))))
-
-(define ((type (lambda Lander geometry.Section bool) alive?) lander section)
-  (let x-max (-7000.0 1.0)
-       y-max (-3000.0 1.0)
-    (and (<= 0 x x-max)
-         (<= 0 y y-max)
-         (over-line? lander (head (filter (partial in-range? lander) surface))))))
-
 ; Рассчёты для стадии последнего снижения: погашение вертикальной скорости с
 ; управлением (vec 0 4) 
 
@@ -135,9 +119,11 @@
 ; скорость такая, что гасить её не надо, нас это устраивает и мы отвечаем, что
 ; не нужна высота и время на сжигание топлива.
 
+(def ^:const ^:private max-final-vy 38.0)
+(def ^:const ^:private max-final-vx 20.0)
+
 (defn- descend-constraint [^Lander {vy :vy}]
-  (let [max-vy 38.0
-        ve (- max-vy)
+  (let [ve (- max-final-vy)
         ay (y-acceleration 0 4)
         t  (/ (- ve vy) ay)]
     (if (< t 0.0)
@@ -174,7 +160,7 @@
     stages
     (let [left? (or (< x ax) (< 0.0 vx))
           xp (if left? bx ax)]
-      (cons (->Stage :braking left? pad pad xp xp ay nil) stages))))
+      (cons (->Stage :brake left? pad pad xp xp ay nil) stages))))
 
 (defn- hover-stages [^Lander {x :x}
                      ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
@@ -211,6 +197,19 @@
        (brake-stage l pad)
        (hover-stages l pad l-rock r-rock)
        (reverse-stage l pad l-rock r-rock)))
+
+(declare hover-guide
+         brake-guide
+         descend-guide)
+
+(defn search-guide [stages ^Lander lander]
+  (debugln :search-guide "search guide" (:stage (first stages)))
+  (if-let [s (first stages)]
+    (case (:stage s)
+      :brake (brake-guide s (rest stages) lander)
+      :hover (hover-guide s (rest stages) lander)
+      :descend (descend-guide s lander)
+      (list))))
 
 (defn- solve-square-equation [^double a ^double b ^double c]
   (if (= 0.0 a)
@@ -270,7 +269,7 @@
               (range a-right (- a-left 1) (- angle-delta))))]
     (->Control a p)))
 
-(declare search-guide)
+
 
 (defn- hover-guide [^Stage stage next-stages ^Lander lander]
   (loop [cloud (keep (partial hover-integrate stage lander) (hover-control-cloud stage lander))]
@@ -280,7 +279,7 @@
         (cons m m-next)
         (recur (next cloud))))))
 
-(defn- brake-align-control [lander {pad :pad} ctl]
+(defn- brake-align-control [^Lander lander ^Stage {pad :pad} ^Control ctl]
   (loop [l lander t 0.0]
     (cond (not (over-section? l pad)) nil
           (= ctl (:control l))        (->Move :ok l t)
@@ -288,32 +287,74 @@
 
 ; Торможение - это 4 стадии: (1) торможение с переходом к выбранному контролю;
 ; (2) торможение с выбранным контролем; (3) торможение во время перехода к
-; (контроль 0 4); (4) выравнивание последней скорости. Поэтому несколько
-; движений. Решение на стадии (2) можно принимать лишь после моделирования
-; стадии 3. Поэтому порядок таков. Кажется, движение аддитивно, поэтому можно
-; обойтись без дополнительных повторных рассчётов.  Вроде как, считать не долго,
-; поэтому ограничения на высоту проверяем в самом конце.
+; (контроль 0 4); Поэтому несколько движений. Решение на стадии (2) можно
+; принимать лишь после моделирования стадии 3. Поэтому порядок таков. Кажется,
+; движение аддитивно, поэтому можно обойтись без дополнительных повторных
+; рассчётов.  Вроде как, считать не долго, поэтому ограничения на высоту
+; проверяем в самом конце.
 
-; Решение для стадии (2) торможения. Тонкости. (2.1) считаем, что целевая
-; vx равна 0. (2.2) считаем, что должны хотя бы 0 секунд тормозить. Иначе, нам
-; дали плохой контроль, и можно было бы потратить меньше топлива на остановку.
+; Решение для стадии (2) торможения. Тонкости. (2.1) считаем, что целевая vx
+; равна 0. (2.2) считаем, что должны хотя бы 0 секунд тормозить. Иначе, нам дали
+; плохой контроль, и можно было бы потратить меньше топлива на остановку.
 
-(defn- solve-brake-2 [{vx :vx {angle :angle power :power :as ctl} :control :as lander}
-                      {pad :pad :as stage}]
-  (let [ax (x-acceleration angle power)
-        tb (/ (- vx) ax)]
-    (if (<= 0.0 tb)
-      (let [t (Math/ceil tb)
-            l (move ctl t lander)]
-        (if (over-section? l pad)
-          (->Move :ok l t))))))
+(defn- solve-brake-2 [^Lander {vx :vx {angle :angle power :power :as ctl} :control :as lander}
+                      ^Stage {pad :pad :as stage}]
+  (let [ax (x-acceleration angle power)]
+    (if (= ax 0.0)
+      (->Move :ok lander 0.0)
+      (let [tb (/ (- vx) ax)]
+        (if (<= 0.0 tb)
+          (let [t (Math/ceil tb)
+                l (move ctl t lander)]
+            (if (over-section? l pad)
+              (->Move :ok l t))))))))
+
+(defn- brake-integrate [^Stage {pad :pad :as stage}
+                        ^Lander lander
+                        ^Control ctl]
+  (debugln :brake-integrate "brake-integrate hi!" \newline "pad:" pad \newline "lander:" lander)
+  (when-let [m-1 (brake-align-control lander stage ctl)]
+    (debugln :brake-integrate "m-1:" m-1)
+    (when-let [m-3 (brake-align-control (:lander m-1) stage (->Control 0 4))]
+      (debugln :brake-integrate "m-3:" m-3)
+      (when-let [m-2 (solve-brake-2 (assoc (:lander m-3) :control ctl) stage)]
+        (debugln :brake-integrate "m-2:" m-2)
+        (comment (when-let [m-4 (solve-brake-4 (:lander m-2) stage)]
+                   (debugln :brake-integrate "m-4:" m-4)
+                   (when-let [dc (descend-constraint (:lander m-4))]
+                     (let [dh-reserve 0.125
+                           hr (+ (:y lander) (reserve (:dh dc) dh-reserve))]
+                       (if (and (< (:ay pad) hr)
+                                (< (* 4.0 (:t dc)) (:fuel (:lander m-4))))
+                         (list m-4 m-3 m-2 m-1))))))
+        (when-let [dc (descend-constraint (:lander m-2))]
+          (let [dh-reserve 0.125
+                l (:lander m-2)
+                hr (+ (:y l) (reserve (:h dc) dh-reserve))]
+          (if (and (< (:ay pad) hr)
+                   (< (* 4.0 (:t dc)) (:fuel (:lander m-3))))
+            (list m-3 m-2 m-1)))))))) 
+
+; По скорости можно определить какой диапазон ускорений следует рассматривать
+
+(defn- brake-control-cloud [^Lander {vx :vx}]
+  (if (>= vx 0.0)
+    (for [p (range 1 5) a (range 0 91 angle-delta)] (->Control a p))
+    (for [p (range 1 5) a (range -90 1 angle-delta)] (->Control a p))))
+
+(defn- brake-guide [^Stage stage next-stages ^Lander lander]
+  (loop [cloud (keep (partial brake-integrate stage lander) (brake-control-cloud lander))]
+    (when-first [m cloud]
+      (if-let [m-next (search-guide next-stages (:lander (first m)))]
+        (cons m m-next)
+        (recur (next cloud))))))
 
 ; Решение для стадии (4) торможения. Тонкости. (4.1) ищем такой угол a для
 ; (контроль a 4), который позволит погасить остаточную скорость, оставаясь в
 ; границах pad.
 
-(defn- solve-brake-4 [{x :x vx :vx :as lander}
-                      {pad :pad :as stage}]
+(defn- solve-brake-4 [^Lander {x :x vx :vx :as lander}
+                      ^Stage {pad :pad :as stage}]
   (let [tx (if (< 0.0 vx) (:bx pad) (:ax pad))]
     (if (not= x tx)
       (let [dx  (- tx x)
@@ -332,38 +373,28 @@
             (let [a     (- (Math/toDegrees (Math/acos (/ axt 4.0))) 90.0)
                   angle (min 15 (Math/ceil a))
                   ctl   (->Control angle 4)]
-              (->Move :ok (move ctl t (assoc lander :control ctl)) t))))))))
+              (->Move :ok (move ctl t (assoc lander :control ctl)) t)))))))) 
 
-(defn brake-integrate [{pad :pad :as stage} lander ctl]
-  (debugln :brake-integrate "brake-integrate hi!" \newline "pad:" pad \newline "lander:" lander)
-  (if-let [m-1 (brake-align-control lander stage ctl)]
-    (do (debugln :brake-integrate "m-1:" m-1)
-        (if-let [m-3 (brake-align-control (:lander m-1) stage (->Control 0 4))]
-          (do (debugln :brake-integrate "m-3:" m-3)
-              (if-let [m-2 (solve-brake-2 (assoc (:lander m-3) :control ctl) stage)]
-                (do (debugln :brake-integrate "m-2:" m-2)
-                    (if-let [m-4 (solve-brake-4 (:lander m-2) stage)]
-                      (do (debugln :brake-integrate "m-4:" m-4)
-                          (if-let [dc (descend-constraint (:lander m-4))]
-                            (let [dh-reserve 0.125
-                                  hr (+ (:y lander) (reserve (:dh dc) dh-reserve))]
-                              (if (and (< (:ay pad) hr)
-                                       (< (* 4.0 (:t dc)) (:fuel (:lander m-4))))
-                                (list m-4 m-3 m-2 m-1))))))))))))) 
+(defn- solve-descend-one [^Lander {x :x vx :vx y :y :as lander}
+                          ^Stage {pad :pad :as stage}]
+  (if (= 0.0 vx)
+    (->Move :done lander 0.0)
+    (let [vy-average -20.0
+          bx (if (< 0.0 vx) (:bx pad) (:ax pad)) 
+          tb (/ (- bx x) vx) 
+          ta (Math/ceil (/ (- (:ay pad) y) vy-average))]
+      (if (and (< (Math/abs vx) max-final-vx)
+               (<= ta tb))
+        (->Move :done lander 0.0)
+        (let [xi (if (> 0.0 vx) 7 -7)
+              ax (x-acceleration xi 4)
+              tc (Math/ceil (/ (- vx) ax))
+              l (move (->Control xi 4) 1.0 lander)] )))))
 
-(defn break-guide [stage lander] (list))
+(defn- descend-guide [^Stage stage ^Lander lander] (list))
 
-(defn search-guide [stages ^Lander lander]
-  (debugln :search-guide "search guide" (:stage (first stages)))
-  (if-let [s (first stages)]
-    (case (:stage s)
-      :brake (break-guide s (rest stages) lander)
-      :hover (hover-guide s (rest stages) lander)
-      :descend (descend-guide s lander)
-      (list))))
-
-(defn model-control [guide lander]
-  (letfn [(do-control [moves l]
+(defn model-control [guide ^Lander lander]
+  (letfn [(do-control [moves ^Lander l]
             (when-first [{{ctl :control} :lander t :dt} moves]
               (let [landers (take (+ 1 t) (iterate (partial move ctl 1.0) l))]
                 (cons landers

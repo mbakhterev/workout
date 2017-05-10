@@ -57,3 +57,7 @@
 (def ^:private ^:const bad (nth bad-cases 1)) 
 
 (map :stage stages)
+(map count guide-controls)
+(map :stage stages)
+(last guide-controls)
+(time (search-guide stages i-lander))
