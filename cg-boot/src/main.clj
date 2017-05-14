@@ -61,3 +61,6 @@
 (map :stage stages)
 (last guide-controls)
 (time (search-guide stages i-lander))
+
+(solve-descend-one (:lander (first (last guide-controls))) (last stages))
+
