@@ -19,9 +19,17 @@
                                              2000 1000 2200 500 2500 100 2900 800
                                              3000 500 3200 1000 3500 2000 3800 800
                                              4000 200 5000 200 5500 1500 6999 2800]
-                                   :lander [500 2700 100 0 800 -90 0]}])
+                                   :lander [500 2700 100 0 800 -90 0]}
+                                  
+                                  {:surface [0 1000 300 1500 350 1400 500 2100
+                                             1500 2100 2000 200 2500 500 2900 300 3000
+                                             200 3200 1000 3500 500 3800 800 4000 200
+                                             4200 800 4800 600 5000 1200 5500 900
+                                             6000 500 6500 300 6999 500]
+                                   
+                                   :lander [6500 2700 -50 0 1000 90 0]}])
 
-(def ^:private ^:const test-id 0)
+(def ^:private ^:const test-id 1)
 (def ^:private ^:const s-points (surface-points (:surface (test-data test-id))))
 (def ^:private ^:const i-lander (load-lander (:lander (test-data test-id))))
 (def ^:private ^:const l-pad (find-landing-pad s-points))
@@ -41,7 +49,7 @@
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell) 
 
-(r/update-scene :traces (model-control guide-controls i-lander))
+(r/update-scene :traces (model-control (deref (def ^:private ^:const guide-controls (search-guide stages i-lander))) i-lander))
 
 (def ^:private ^:const bad-cases
   [{:C (->Control 60 4)
@@ -61,6 +69,10 @@
 (map :stage stages)
 (last guide-controls)
 (time (search-guide stages i-lander))
+(identity stages)
+(identity i-lander)
 
 (solve-descend-one (:lander (first (last guide-controls))) (last stages))
 
+(map (fn [s] [(:x (first s)) (:x (second s))]) (partition 2 1 s-points))
+(map (fn [[a b]] (println "a:" a "b:" b) (make-section a b)) (partition 2 1 s-points))
