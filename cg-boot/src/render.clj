@@ -48,12 +48,19 @@
     {:trace (map correct-lander L)
      :mark  (str (apply format "%.3f|%.3f|%d|%d" ((juxt :vx :vy (comp :angle :control) (comp :power :control)) l)))}))
 
+(defn- correct-stage [s]
+  (if (#{:hover :brake :reverse} (:stage s))
+    {:target (* factor-x (:x-goal s))
+     :mark (str (:stage s) (if (:left? s) " left" " right"))
+     :left? (:left? s)}))
+
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag
                            :surface (correct-surface value)
                            :shell (correct-surface value)
                            :landing-pad (correct-y-section (scale-section value))
-                           :traces (map correct-trace value))
+                           :traces (map correct-trace value)
+                           :stages (keep correct-stage value))
                      :redraw true)
   true)
 
@@ -68,10 +75,10 @@
     (q/no-stroke)
     (q/fill 0)
     (q/ellipse (:x l) (:y l) 4 4)
-    (q/stroke 0 0 255)
-    (q/line x y (+ x vx) (+ y vy))
     (q/stroke 255 0 0)
-    (q/line x y (+ x (* 4 ax)) (+ y (* 4 ay))))) 
+    (q/line x y (+ x (* 4 ax)) (+ y (* 4 ay)))
+    (q/stroke 0 0 255)
+    (q/line x y (+ x vx) (+ y vy)))) 
 
 (def ^:private ^:const rG 10.0)
 
@@ -127,13 +134,16 @@
             (do (q/stroke 0)
                 (q/stroke-weight 1)
                 (doseq [s shell]
-                  (q/line (:ax s) (:ay s) (:bx s) (:by s)))
-                (if-let [landing (:landing-pad sc)]
-                  (do (q/stroke 127)
-                      (q/stroke-weight 1)
-                      (doseq [s shell]
-                        (let [x (if (<= (:ax s) (:ax landing)) (:bx s) (:ax s))]
-                          (q/line x 0 x (- display-height 1))))))))
+                  (q/line (:ax s) (:ay s) (:bx s) (:by s)))))
+
+          (if-let [stages (:stages sc)]
+            (do (q/stroke 127)
+                (q/stroke-weight 1)
+                (doseq [{x :target t :mark l :left?} stages]
+                  (q/line x 0 x (- display-height 1))
+                  (if l
+                    (q/text t (- x 5 (q/text-width t)) 10)
+                    (q/text t (+ x 5) 10)))))
 
           (if-let [landing (:landing-pad sc)]
             (do (q/stroke 255 0 0)

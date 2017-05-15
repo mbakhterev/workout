@@ -166,14 +166,27 @@
           xp (if left? bx ax)]
       (cons (->Stage :brake left? pad pad xp xp ay nil) stages))))
 
-(defn- hover-stages [^Lander {x :x}
-                     ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
-                     l-rock r-rock stages] 
-  (let [on-left (fn [s] (if (< x (:bx s) bx) (->Stage :hover true s pad (:bx s) bx ay nil)))
-        on-right (fn [s] (if (> x (:ax s) ax) (->Stage :hover false s pad (:ax s) ax ay nil)))]
-    (concat (cond (< x ax) (keep on-left l-rock)
-                  (> x bx) (keep on-right (reverse r-rock)))
-            stages)))
+(comment (defn- hover-stages [^Lander {x :x}
+                              ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+                              l-rock r-rock stages] 
+           (let [on-left (fn [s] (if (< x (:bx s) bx) (->Stage :hover true s pad (:bx s) bx ay nil)))
+                 on-right (fn [s] (if (> x (:ax s) ax) (->Stage :hover false s pad (:ax s) ax ay nil)))]
+             (concat (cond (< x ax) (keep on-left l-rock)
+                           (> x bx) (keep on-right (reverse r-rock)))
+                     stages))))
+
+(defn hover-stages [^Lander {x :x :as l}
+                   ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+                    l-rock r-rock stages]
+  (letfn [(on-left [^Stage s] (if (< x (:bx s) bx) (map (fn [^double t] (->Stage :hover true s pad t bx ay nil)) (divide-stage (max x (:ax s)) (:bx s)))))
+          (on-right [^Stage s] (if (> x (:ax s) ax) (map (fn  [^double t] (->Stage :hover false s pad t ax ay nil)) (divide-stage  (min x (:bx s)) (:ax s)))))
+          (divide-stage [^double a ^double t]
+            (if (< (Math/abs (- t a)) 2048.0)
+              (list t)
+              (let [m (+ a (/ (- t a) 2.0))] (concat (divide-stage a m) (divide-stage m t)))))]
+    (concat (cond (< x ax) (mapcat on-left l-rock)
+                  (> x bx) (mapcat on-right (reverse r-rock)))
+      stages)))
 
 (defn- reverse-stage [^Lander {x :x vx :vx :as lander}
                       ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
@@ -210,9 +223,9 @@
   (debugln :search-guide "search guide" (:stage (first stages)))
   (if-let [s (first stages)]
     (case (:stage s)
-      ; :brake (brake-guide s (rest stages) lander)
+      :brake (brake-guide s (rest stages) lander)
       :hover (hover-guide s (rest stages) lander)
-      ; :descend (descend-guide s lander)
+      :descend (descend-guide s lander)
 
       (list))))
 
@@ -267,7 +280,7 @@
 
 ; Облако возможных управлений на стадии hover
 
-(def ^:const ^:private angle-delta 5) 
+(def ^:const ^:private angle-delta 15) 
 
 (defn- hover-control-cloud [^Stage stage ^Lander lander]
   (for [p (range 0 5)

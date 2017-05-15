@@ -29,7 +29,7 @@
                                    
                                    :lander [6500 2700 -50 0 1000 90 0]}])
 
-(def ^:private ^:const test-id 1)
+(def ^:private ^:const test-id 0)
 (def ^:private ^:const s-points (surface-points (:surface (test-data test-id))))
 (def ^:private ^:const i-lander (load-lander (:lander (test-data test-id))))
 (def ^:private ^:const l-pad (find-landing-pad s-points))
@@ -48,6 +48,7 @@
 (r/update-scene :surface surface)
 (r/update-scene :landing-pad l-pad)
 (r/update-scene :shell shell) 
+(r/update-scene :stages stages)
 
 (r/update-scene :traces (model-control (deref (def ^:private ^:const guide-controls (search-guide stages i-lander))) i-lander))
 
@@ -76,3 +77,5 @@
 
 (map (fn [s] [(:x (first s)) (:x (second s))]) (partition 2 1 s-points))
 (map (fn [[a b]] (println "a:" a "b:" b) (make-section a b)) (partition 2 1 s-points))
+(map :x-goal (hover-stages i-lander l-pad l-shell r-shell (list)))
+(identity stages)
