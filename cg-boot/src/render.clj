@@ -46,7 +46,7 @@
 (defn- correct-trace [L]
   (let [l (last L)]
     {:trace (map correct-lander L)
-     :mark  (str (apply format "%.3f|%.3f|%d|%d" ((juxt :vx :vy (comp :angle :control) (comp :power :control)) l)))}))
+     :mark  (str (apply format "%d|%.3f|%.3f|%d|%d" ((juxt :fuel :vx :vy (comp :angle :control) (comp :power :control)) l)))}))
 
 (defn- correct-stage [s]
   (if (#{:hover :brake :reverse} (:stage s))

@@ -26,8 +26,9 @@
                    ^long fuel
                    ^Control control])
 
-(defn load-lander [nums]
-  (let [[m c] (split-at 5 nums)] (apply ->Lander (conj (vec m) (apply ->Control c))))) 
+(defn- form-lander [nums]
+  (let [[m c] (split-at 5 nums)]
+    (apply ->Lander (conj (vec m) (apply ->Control c))))) 
 
 (defrecord Stage [stage
                   ^boolean left?
@@ -103,11 +104,10 @@
   (and (in-range? lander section)
        (over-line? lander section)))
 
-(defn- on-radar? [^Lander {x :x y :y}]
-  (let [x-max (- 7000.0 10.0)
-        y-max (- 3000.0 10.0)]
-    (and (<= 0 x x-max)
-         (<= 0 y y-max))))
+(def ^:const ^:private x-max (- 7000.0 1.0))
+(def ^:const ^:private y-max (- 3000.0 1.0))
+
+(defn- on-radar? [^Lander {x :x y :y}] (and (<= 0 x x-max) (<= 0 y y-max)))
 
 (defn alive? [^geometry.Section surface ^Lander {x :x y :y :as lander}]
   (and (on-radar? lander)
@@ -220,20 +220,19 @@
          descend-guide)
 
 (defn search-guide [stages ^Lander lander]
-  (debugln :search-guide "search guide" (:stage (first stages)))
   (if-let [s (first stages)]
     (case (:stage s)
       :brake (brake-guide s (rest stages) lander)
       :hover (hover-guide s (rest stages) lander)
       :descend (descend-guide s lander)
-
       (list))))
 
+(defn- near-zero? [^double a] (> 1E-10 (Math/abs a)))
+
 (defn- solve-square-equation [^double a ^double b ^double c]
-  (if (> 1E-10 (Math/abs a))
+  (if (near-zero? a) 
     (if (not= 0.0 b)
       (let [t (/ (- c) b)] (->Roots t t)))
-    
     (let [D (- (* b b) (* 4.0 a c))]
       (if (<= 0.0 D)
         (let [D-sqrt (Math/sqrt D)
@@ -242,6 +241,18 @@
               tm     (* (- (- b) D-sqrt) a-rcpr)]
           (->Roots (min tp tm) (max tp tm)))))))
 
+; Необходимо найти экстремальную точку на отрезке [0; t]
+
+(defn- square-extremum [^double a ^double b ^double c ^double t]
+  (if (near-zero? a)
+    (+ (* b t) c)
+    (let [tx (/ (- b) a 2.0)]
+      (if (<= 0.0 tx t)
+        (+ (* a tx tx) (* b tx) c)
+        (if (< t tx)
+          (+ (* a t t) (* b t) c)
+          c)))))
+
 (defn- solve-hover [^Lander {x :x vx :vx {a :angle p :power :as ctl} :control :as l}
                     ^Stage {x-target :x-goal}]
   (let [ax (x-acceleration a p)
@@ -249,7 +260,6 @@
     (if r 
       (let [{tl :left tr :right} r
             tm (Math/ceil (if (<= 0.0 tl) tl tr))]
-        (debugln :solve-hover tl tr tm "a p ax:" a p ax)
         (if (<= 0.0 tm) 
           (->Move :ok (move ctl tm l) tm))))))
 
@@ -261,12 +271,14 @@
           (= ctl (:control l))         (->Move :ok l t)
           :else                        (recur (move ctl 1.0 l) (+ 1.0 t)))))
 
-(defn- hover-integrate-ok-one [^Stage {section :section :as stage} ^Lander lander]
+(defn- hover-integrate-ok-one [^Stage {section :section :as stage}
+                               ^Lander {y :y vy :vy {a :angle p :power} :control :as lander}]
   (if-let [m (solve-hover lander stage)]
-    (let [l (:lander m)]
+    (let [{l :lander t :dt} m]
       (if (and (constraint l stage)
                (on-radar? l)
-               (over-line? l section))
+               (over-line? l section)
+               (> (- y-max 10) (square-extremum (* 0.5 (y-acceleration a p)) vy y t)))
         m))))
 
 (defn- hover-integrate [^Stage stage
@@ -294,7 +306,6 @@
 (defn- hover-guide [^Stage stage next-stages ^Lander lander]
   (loop [cloud (keep (partial hover-integrate stage lander) (hover-control-cloud stage lander))]
     (when-first [m cloud]
-      (debugln :hover-guide m)
       (if-let [m-next (search-guide next-stages (:lander (first m)))]
         (cons m m-next)
         (recur (next cloud))))))
@@ -334,13 +345,9 @@
 (defn- brake-integrate [^Stage {pad :pad :as stage}
                         ^Lander lander
                         ^Control ctl]
-  (debugln :brake-integrate "brake-integrate hi!" \newline "pad:" pad \newline "lander:" lander)
   (when-let [m-1 (brake-align-control lander stage ctl)]
-    (debugln :brake-integrate "m-1:" m-1)
     (when-let [m-3 (brake-align-control (:lander m-1) stage (->Control 0 4))]
-      (debugln :brake-integrate "m-3:" m-3)
       (when-let [m-2 (solve-brake-2 (assoc (:lander m-3) :control ctl) stage)]
-        (debugln :brake-integrate "m-2:" m-2)
         (when-let [dc (descend-constraint (:lander m-2))]
           (let [dh-reserve 0.125
                 l (:lander m-2)
@@ -377,7 +384,6 @@
           bx (if (< 0.0 vx) (:bx pad) (:ax pad)) 
           tb (/ (- bx x) vx) 
           ta (Math/ceil (/ (- (:ay pad) y) vy-average))]
-      (debugln :solve-descend-one "tb:" tb "ta:" ta "pad:" pad "bx:" bx "vx:" vx)
       (if (and (< (Math/abs ^double vx) max-final-vx)
                (<= ta tb))
         (->Move :done lander 0.0)
@@ -395,8 +401,7 @@
     (if-let [m (solve-descend-one l stage)]
       (case (:state m)
         :done R
-        :ok (recur (:lander m) (cons m R)))))
-  )
+        :ok (recur (:lander m) (cons m R))))))
 
 (defn model-control [guide ^Lander lander]
   (letfn [(do-control [moves ^Lander l]
@@ -405,3 +410,4 @@
                 (cons landers
                       (do-control (next moves) (last landers))))))]
     (do-control (mapcat reverse guide) lander)))
+
