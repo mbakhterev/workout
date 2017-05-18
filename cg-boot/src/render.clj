@@ -59,12 +59,12 @@
                            :surface (correct-surface value)
                            :shell (correct-surface value)
                            :landing-pad (correct-y-section (scale-section value))
-                           :traces (map correct-trace value)
+                           :guide-traces (map correct-trace value)
                            :stages (keep correct-stage value))
                      :redraw true)
   true)
 
-(defn- draw-lander [l]
+(defn- draw-lander [l a-color v-color]
   (let [c  (:control l)
         x  (:x l)
         y  (:y l)
@@ -75,9 +75,9 @@
     (q/no-stroke)
     (q/fill 0)
     (q/ellipse (:x l) (:y l) 4 4)
-    (q/stroke 255 0 0)
+    (apply q/stroke a-color)
     (q/line x y (+ x (* 4 ax)) (+ y (* 4 ay)))
-    (q/stroke 0 0 255)
+    (apply q/stroke v-color)
     (q/line x y (+ x vx) (+ y vy)))) 
 
 (def ^:private ^:const rG 10.0)
@@ -153,9 +153,9 @@
                   (mark-point (:ax landing) (:ay landing))
                   (mark-point (:bx landing) (:by landing)))))
 
-          (if-let [traces (:traces sc)]
+          (if-let [traces (:guide-traces sc)]
             (doseq [t traces]
-              (doseq [l (:trace t)] (draw-lander l))
+              (doseq [l (:trace t)] (draw-lander l [255 0 0] [0 0 255]))
               (let [l (last (:trace t))
                     m (:mark t)
                     text-width (q/text-width m)]

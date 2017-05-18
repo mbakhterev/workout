@@ -403,11 +403,27 @@
                       (do-control (next moves) (last landers))))))]
     (do-control (mapcat reverse guide) lander)))
 
-(defn -main [& args]
-  (let [P (read-surface)
-        L (read-lander)]
-    (dump "surface: " P)
-    (dump "lander: " L)))
+(defn- make-guide [lander-data surface-data]
+  (let [s-points (surface-points surface-data)
+        i-lander (form-lander lander-data)
+        l-pad (find-landing-pad s-points)
+        surface (surface-sections s-points)
+        [l-rock r-rock] (surface-shell s-points l-pad)
+        stages (detect-stages i-lander l-rock l-pad r-rock)]
+    (do (r/update-scene :surface surface)
+        (r/update-scene :landing-pad l-pad)
+        (r/update-scene :shell (vec (concat l-rock (list l-pad) r-rock))) 
+        (r/update-scene :stages stages))
+    (let [guide (model-control (search-guide stages i-lander) i-lander)]
+      (do (r/update-scene :guide-traces guide))
+      (apply concat guide))))
+
+(defn- approximate-move [^Control control trace]
+  (let [l (move control 1.0 ^Lander (last trace))]
+    (conj trace (assoc l :x (Math/round (:x l))
+                         :y (Math/round (:y l))
+                         :vx (Math/round (:vx l))
+                         :vy (Math/round (:vy l))))))
 
 ; Тестовые данные
 (def ^:private ^:const test-data [{:surface [0 1000 300 1500 350 1400 500 2000
@@ -425,56 +441,58 @@
                                    
                                    :lander [6500 2700 -50 0 1000 90 0]}])
 
-(def ^:private ^:const test-id 1)
-(def ^:private ^:const s-points (surface-points (:surface (test-data test-id))))
-(def ^:private ^:const i-lander (load-lander (:lander (test-data test-id))))
-(def ^:private ^:const l-pad (find-landing-pad s-points))
-(def ^:private ^:const surface (surface-sections s-points))
-(let [[l r] (surface-shell s-points l-pad)]
-  (def ^:private ^:const shell (vec (concat l (list l-pad) r)))
-  (def ^:private ^:const l-shell l)
-  (def ^:private ^:const r-shell r))
+(defn -main [& args]
+  (let [; P (read-surface)
+        ; L (read-lander)
+        P (:lander (test-data 0))
+        L (:surface (test-data 0))
+        G (future (make-guide P L))]
 
-(def ^:private ^:const stages (detect-stages i-lander l-shell l-pad r-shell)) 
+    (dump "surface: " P)
+    (dump "lander: " L)
 
-(def ^:private ^:const guide-controls (search-guide stages i-lander))
+    (do (r/sketch-up))
+    
+    (let [[wait-trace guide] (loop [t [L]] (if-let [g (deref G 100 nil)] [t g] (recur (approximate-move (->Control 0 4) t))))]
+      
+      )))
 
 ; eval
 
-(r/update-scene :surface surface)
-(r/update-scene :landing-pad l-pad)
-(r/update-scene :shell shell) 
-(r/update-scene :stages stages)
+(-main)
 
-(r/update-scene :traces (model-control (deref (def ^:private ^:const guide-controls (search-guide stages i-lander))) i-lander))
-(comment (r/sketch-up))
+(comment (r/sketch-up)
+         (def ^:private ^:const bad-cases
+           [{:C (->Control 60 4)
+             :S (nth stages 2) 
+             :L #lander.Lander{:x 1500.0, :y 2514.4499999999994, :vx 100.0, :vy -37.10999999999999, :fuel 800,
+                               :control #lander.Control{:angle -15, :power 0}}}
 
-(def ^:private ^:const bad-cases
-  [{:C (->Control 60 4)
-    :S (nth stages 2) 
-    :L #lander.Lander{:x 1500.0, :y 2514.4499999999994, :vx 100.0, :vy -37.10999999999999, :fuel 800,
-                      :control #lander.Control{:angle -15, :power 0}}}
-   
-   {:C (->Control 20 4)
-    :S (nth stages 2)
-    :L #lander.Lander{:x 1500.3393543299987, :y 2529.3060059296076, :vx 99.64872884586892, :vy -27.17071128706871, :fuel 790,
-                      :control #lander.Control{:angle 5, :power 4}}}])
+            {:C (->Control 20 4)
+             :S (nth stages 2)
+             :L #lander.Lander{:x 1500.3393543299987, :y 2529.3060059296076, :vx 99.64872884586892, :vy -27.17071128706871, :fuel 790,
+                               :control #lander.Control{:angle 5, :power 4}}}])
 
-(def ^:private ^:const bad (nth bad-cases 1)) 
+         (def ^:private ^:const bad (nth bad-cases 1)) 
 
-(map :stage stages)
-(map count guide-controls)
-(map :stage stages)
-(last guide-controls)
-(time (search-guide stages i-lander))
-(identity stages)
-(identity i-lander)
+         (map :stage stages)
+         (map count guide-controls)
+         (map :stage stages)
+         (last guide-controls)
+         (time (search-guide stages i-lander))
+         (identity stages)
+         (identity i-lander)
 
-(solve-descend-one (:lander (first (last guide-controls))) (last stages))
+         (solve-descend-one (:lander (first (last guide-controls))) (last stages))
 
-(map (fn [s] [(:x (first s)) (:x (second s))]) (partition 2 1 s-points))
-(map (fn [[a b]] (println "a:" a "b:" b) (make-section a b)) (partition 2 1 s-points))
-(map :x-goal (hover-stages i-lander l-pad l-shell r-shell (list)))
-(identity stages)
-(map (juxt :stage :x-goal) stages)
+         (map (fn [s] [(:x (first s)) (:x (second s))]) (partition 2 1 s-points))
+         (map (fn [[a b]] (println "a:" a "b:" b) (make-section a b)) (partition 2 1 s-points))
+         (map :x-goal (hover-stages i-lander l-pad l-shell r-shell (list)))
+         (identity stages)
+         (map (juxt :stage :x-goal) stages)
+         
+
+         )
+
+
 
