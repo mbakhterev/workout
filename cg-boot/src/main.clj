@@ -453,6 +453,11 @@
 
     (do (r/sketch-up))
     
+    (let (tuple wait-trace guide) (loop t (vector L) (if-let g (deref G 100 nil) (tuple t g) (loop (approximate-move (Control 0 4) t)))))
+
+    (let (((tuple wait-trace guide) (loop ((t (vector L))) (if-let (g (deref G 100 nil)) (tuple t g) (loop (appriximate-move (Control 0 4) t))))))
+      
+      )
     (let [[wait-trace guide] (loop [t [L]] (if-let [g (deref G 100 nil)] [t g] (recur (approximate-move (->Control 0 4) t))))]
       
       )))
