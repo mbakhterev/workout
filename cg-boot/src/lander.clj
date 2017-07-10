@@ -45,14 +45,14 @@
 
 (defrecord Move [state ^Lander lander ^double dt])
 
-(defn- control-to [^Control f ^Control t]
-  (let [angle-max-delta 15
-        power-max-delta 1
-        tune-value (fn [^long current ^long goal ^long max-delta]
-                     (let [delta (- goal current)]
-                       (cond (= 0 delta) goal
-                             (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
-                             (> 0 delta) (if (> delta (- max-delta)) goal (- current max-delta)))))]
+(let [angle-max-delta 15
+      power-max-delta 1
+      tune-value (fn [^long current ^long goal ^long max-delta]
+                   (let [delta (- goal current)]
+                     (cond (= 0 delta) goal
+                           (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
+                           (> 0 delta) (if (> delta (- max-delta)) goal (- current max-delta)))))]
+  (defn- control-to [^Control f ^Control t]
     (->Control (tune-value (:angle f) (:angle t) angle-max-delta)
                (tune-value (:power f) (:power t) power-max-delta))))
 

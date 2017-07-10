@@ -48,7 +48,7 @@
                                    :lander [6500 2700 -50 0 1000 90 0]}])
 
 (defn -main [& args]
-  (r/sketch-up)
+  (comment (r/sketch-up))
 
   (let [; P (read-surface)
         ; L (read-lander)
@@ -67,10 +67,20 @@
       (dump "trace:" trace-04)
       (r/update-scene :lander-traces [trace-04])
       
-      (loop [g guide trace [(last trace-04)]]
-        (let [[l guide-item] (approach-guide (last trace) g)])
-        )
-      )))
+      (let [trace (loop [g guide
+                         t [(last trace-04)]]
+                    (if (empty? g)
+                      t
+                      (let [[l guide-item] (along-guide (last t) g)
+                            guide-rest (rest (drop-while (fn [x] (not= guide-item x)) g))
+                            l-next (approximate-move (:control l) t)]
+                        (recur guide-rest l-next))))]
+        (r/update-scene :lander-traces [trace-04 trace]))
+      
+      (along-guide (last trace-04) guide)
+      )))  
+
+
 
 ; eval
 
@@ -104,7 +114,4 @@
          (map (fn [[a b]] (println "a:" a "b:" b) (make-section a b)) (partition 2 1 s-points))
          (map :x-goal (hover-stages i-lander l-pad l-shell r-shell (list)))
          (identity stages)
-         (map (juxt :stage :x-goal) stages)
-         
-
-         )
+         (map (juxt :stage :x-goal) stages))
