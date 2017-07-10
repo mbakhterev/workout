@@ -26,7 +26,7 @@
                    ^long fuel
                    ^Control control])
 
-(defn- form-lander [nums]
+(defn form-lander [nums]
   (let [[m c] (split-at 5 nums)]
     (apply ->Lander (conj (vec m) (apply ->Control c))))) 
 
@@ -74,9 +74,9 @@
 ; модуля и то управление, которое привело его в это положение. Положение -
 ; вектор в фазовом пространстве (vec x y dx dy fuel)
  
-(defn- move [^Control ctl
-             ^double t
-             ^Lander {lc :control :as l}] 
+(defn move [^Control ctl
+            ^double t
+            ^Lander {lc :control :as l}] 
   (let [{angle :angle power :power :as nc} (control-to lc ctl)
         ax (x-acceleration angle power)
         ay (y-acceleration angle power)
@@ -390,7 +390,7 @@
         (let [xi (if (> 0.0 vx) 7 -7)
               ax (x-acceleration xi 4)
               tc (Math/ceil (/ (- vx) ax))
-              l (move (->Control xi 4) tc lander)
+              l  (move (->Control xi 4) tc lander)
               dc (descend-constraint l)]
           (if (and (in-range? l pad)
                    (< (:ay dc) (+ (:y l) (:h dc))))
@@ -411,3 +411,21 @@
                       (do-control (next moves) (last landers))))))]
     (do-control (mapcat reverse guide) lander)))
 
+(defn- along-guide-cloud [^Lander {{angle :angle power :power} :control :as lander}]
+  (for [p (range (max 0 (- power 1)) (min 4 (+ power 1)))
+        a (range (max -90 (- angle 15)) (min (+ angle 15 1) 91))]
+    (move (->Control a p) 1.0 lander)))
+
+(defn- diff-landers-pair [[^Lander a ^Lander b]]
+  (let [dx (- (:x a) (:x b))
+        dy (- (:y a) (:y b))
+        dvx (- (:vx a) (:vx b))
+        dvy (- (:vy a) (:vy b))]
+    (Math/sqrt (+ (* dx dx)
+                  (* dy dy)
+                  (* dvx dvx)
+                  (* dvy dvy)))))
+
+(defn along-guide [^Lander lander guide]
+  (first (sort-by diff-landers-pair
+                  (for [c (along-guide-cloud lander) g (take 16 guide)] [c g]))))

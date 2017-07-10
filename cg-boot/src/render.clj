@@ -60,6 +60,7 @@
                            :shell (correct-surface value)
                            :landing-pad (correct-y-section (scale-section value))
                            :guide-traces (map correct-trace value)
+                           :lander-traces (map correct-trace value)
                            :stages (keep correct-stage value))
                      :redraw true)
   true)
@@ -159,7 +160,16 @@
               (let [l (last (:trace t))
                     m (:mark t)
                     text-width (q/text-width m)]
-                (q/text m (- (:x l) 5 text-width) (+ (:y l) 10))))))))
+                (q/text m (- (:x l) 5 text-width) (+ (:y l) 10)))))
+          
+          (if-let [traces (:lander-traces sc)]
+            (doseq [t traces]
+              (doseq [l (:trace t)] (draw-lander l [255 83 0] [0 255 0]))
+              (let [l (last (:trace t))
+                    m (:mark t)
+                    text-width (q/text-width m)]
+                (q/text m (- (:x l) 5 text-width) (+ (:y l) 10)))))
+          )))
   
   (swap! scene assoc :redraw false)) 
 
