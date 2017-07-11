@@ -22,7 +22,7 @@
         (r/update-scene :stages stages))
     (let [guide (model-control (search-guide stages i-lander) i-lander)]
       (do (r/update-scene :guide-traces guide))
-      (apply concat guide))))
+      (vec (apply concat guide)))))
 
 (defn- approximate-move [^lander.Control control trace]
   (let [l (move control 1.0 ^Lander (last trace))]
@@ -67,7 +67,7 @@
       (dump "trace:" trace-04)
       (r/update-scene :lander-traces [trace-04])
       
-      (let [trace (loop [g guide
+      (comment (let [trace (loop [g guide
                          t [(last trace-04)]]
                     (if (empty? g)
                       t
@@ -75,12 +75,16 @@
                             guide-rest (rest (drop-while (fn [x] (not= guide-item x)) g))
                             l-next (approximate-move (:control l) t)]
                         (recur guide-rest l-next))))]
+        (r/update-scene :lander-traces [trace-04 trace])))
+
+      (let [trace (loop [t [(last trace-04)]]
+                    (let [control (along-guide (last t) guide)]
+                      (if (nil? control)
+                        t
+                        (recur (approximate-move control t)))))]
         (r/update-scene :lander-traces [trace-04 trace]))
       
-      (along-guide (last trace-04) guide)
-      )))  
-
-
+      (comment (along-guide (last trace-04) guide)))))  
 
 ; eval
 

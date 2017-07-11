@@ -412,20 +412,28 @@
     (do-control (mapcat reverse guide) lander)))
 
 (defn- along-guide-cloud [^Lander {{angle :angle power :power} :control :as lander}]
-  (for [p (range (max 0 (- power 1)) (min 4 (+ power 1)))
+  (for [p (range (max 0 (- power 1)) (min (+ power 1 1) 5))
         a (range (max -90 (- angle 15)) (min (+ angle 15 1) 91))]
     (move (->Control a p) 1.0 lander)))
 
-(defn- diff-landers-pair [[^Lander a ^Lander b]]
+(defn- diff-landers [^Lander a ^Lander b]
   (let [dx (- (:x a) (:x b))
         dy (- (:y a) (:y b))
         dvx (- (:vx a) (:vx b))
         dvy (- (:vy a) (:vy b))]
-    (Math/sqrt (+ (* dx dx)
-                  (* dy dy)
-                  (* dvx dvx)
-                  (* dvy dvy)))))
+    (+ (* dx dx)
+       (* dy dy)))) 
 
 (defn along-guide [^Lander lander guide]
-  (first (sort-by diff-landers-pair
-                  (for [c (along-guide-cloud lander) g (take 16 guide)] [c g]))))
+  (let [ig (first (reduce-kv (fn [[^long k ^double M :as r] ^long i ^Lander g]
+                               (let [mi (diff-landers lander g)]
+                                 (if (<= M mi) r [i mi])))
+                             [0 (diff-landers lander (nth guide 0))]
+                             guide))]
+    (if (> (- (count guide) 1) ig)
+      (let [target (nth guide (+ 1 ig))
+            cloud (along-guide-cloud lander)
+            closest (apply min-key (partial diff-landers target) cloud)]
+        (if (>= (:y closest) (:y target))
+          (:control closest)
+          (->Control 0 4))))))
