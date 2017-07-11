@@ -6,12 +6,13 @@
   (defn- debugln [flag & args]
     (let [flags (hash-set ; :hover-search
                           ; :search-guide
-                          :solve-hover
+                          ; :solve-hover
                           ; :brake-integrate
                           ; :solve-brake-4
                           ; :hover-guide
                           ; :hover-integrate
                           ; :solve-descend-one
+                          :along-guide
                           )]
       (if (flags flag) (apply println args)))))
 
@@ -422,7 +423,10 @@
         dvx (- (:vx a) (:vx b))
         dvy (- (:vy a) (:vy b))]
     (+ (* dx dx)
-       (* dy dy)))) 
+       (* dy dy)
+       (* dvx dvx)
+       (* dvy dvy)
+       ))) 
 
 (defn along-guide [^Lander lander guide]
   (let [ig (first (reduce-kv (fn [[^long k ^double M :as r] ^long i ^Lander g]
@@ -430,10 +434,9 @@
                                  (if (<= M mi) r [i mi])))
                              [0 (diff-landers lander (nth guide 0))]
                              guide))]
+    (debugln :along-guide "ig:" ig)
     (if (> (- (count guide) 1) ig)
       (let [target (nth guide (+ 1 ig))
             cloud (along-guide-cloud lander)
             closest (apply min-key (partial diff-landers target) cloud)]
-        (if (>= (:y closest) (:y target))
-          (:control closest)
-          (->Control 0 4))))))
+        (:control target)))))

@@ -22,7 +22,7 @@
         (r/update-scene :stages stages))
     (let [guide (model-control (search-guide stages i-lander) i-lander)]
       (do (r/update-scene :guide-traces guide))
-      (vec (apply concat guide)))))
+      (vec (apply concat (first guide) (map rest (rest guide)))))))
 
 (defn- approximate-move [^lander.Control control trace]
   (let [l (move control 1.0 ^Lander (last trace))]
@@ -30,6 +30,16 @@
                          :y (Math/round ^double (:y l))
                          :vx (Math/round ^double (:vx l))
                          :vy (Math/round ^double (:vy l))))))
+
+(defn- trace-move [^lander.Control control trace]
+  (conj trace (move control 1.0 ^Lander (last trace))))
+
+(defn- approximate-last [trace]
+  (let [l ^Lander (last trace)]
+    (assoc l :x (Math/round ^double (:x l))
+             :y (Math/round ^double (:y l))
+             :vx (Math/round ^double (:vx l))
+             :vy (Math/round ^double (:vy l)))))
 
 ; Тестовые данные
 (def ^:private ^:const test-data [{:surface [0 1000 300 1500 350 1400 500 2000
@@ -61,30 +71,20 @@
     (let [[guide trace-04] (loop [t [(form-lander L)] g (deref G 128 nil)]
                              (if g
                                [g t]
-                               (recur (approximate-move (->Control 0 4) t)
+                               (recur (trace-move (->Control 0 4) t)
                                       (deref G 128 nil))))]
       (dump "guide-length:" (count guide))
       (dump "trace:" trace-04)
       (r/update-scene :lander-traces [trace-04])
       
-      (comment (let [trace (loop [g guide
-                         t [(last trace-04)]]
-                    (if (empty? g)
-                      t
-                      (let [[l guide-item] (along-guide (last t) g)
-                            guide-rest (rest (drop-while (fn [x] (not= guide-item x)) g))
-                            l-next (approximate-move (:control l) t)]
-                        (recur guide-rest l-next))))]
-        (r/update-scene :lander-traces [trace-04 trace])))
-
       (let [trace (loop [t [(last trace-04)]]
-                    (let [control (along-guide (last t) guide)]
+                    (let [control (along-guide (approximate-last t) guide)]
                       (if (nil? control)
                         t
-                        (recur (approximate-move control t)))))]
-        (r/update-scene :lander-traces [trace-04 trace]))
-      
-      (comment (along-guide (last trace-04) guide)))))  
+                        (recur (trace-move control t)))))]
+        (r/update-scene :lander-traces [trace-04 trace])
+        (last trace)
+        ))))
 
 ; eval
 
