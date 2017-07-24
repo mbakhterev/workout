@@ -7,7 +7,7 @@
 (def ^:private ^:const space-width 7000)
 (def ^:private ^:const space-height 3000) 
 
-(def ^:private ^:const display-width 1800)
+(def ^:private ^:const display-width 1500)
 (def ^:private ^:const display-height (long (* display-width (/ space-height space-width))))
 
 (def ^:private ^:const factor-x (float (/ display-height space-height)))
@@ -168,8 +168,7 @@
               (let [l (last (:trace t))
                     m (:mark t)
                     text-width (q/text-width m)]
-                (q/text m (- (:x l) 5 text-width) (+ (:y l) 10)))))
-          )))
+                (q/text m (- (:x l) 5 text-width) (+ (:y l) 10))))))))
   
   (swap! scene assoc :redraw false)) 
 

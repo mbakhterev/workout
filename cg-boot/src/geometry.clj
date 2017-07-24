@@ -15,7 +15,12 @@
                     ^double k
                     ^double mx])
 
-(defn make-section [^Point a ^Point b]
+(defrecord Landscape [^geometry.Section landing-pad
+                      left-rock
+                      right-rock
+                      raw-surface])
+
+(defn- make-section [^Point a ^Point b]
   (->Section (:x a) (:y a)
              (:x b) (:y b)
              (double (/ (- (:y b) (:y a))
@@ -23,17 +28,17 @@
              (+ (:x a)
                 (/ (- (:x b) (:x a)) 2.0))))
 
-(defn surface-points [raw-numbers]
+(defn- surface-points [raw-numbers]
   (map (fn [p] (apply ->Point p)) (partition 2 raw-numbers)))
 
-(defn surface-sections [points]
+(defn- surface-sections [points]
   (map (fn [s] (apply make-section s)) (partition 2 1 points)))
 
-(defn find-landing-pad [points]
+(defn- find-landing-pad [points]
   (letfn [(is-pad ([[a b]] (< -0.01 (- (:y a) (:y b)) 0.01)))]
     (apply make-section (first (filter is-pad (partition 2 1 points))))))
 
-(defn surface-shell [points landing]
+(defn- surface-shell [points landing]
   (letfn [(monotonize [points]
             (loop [[p & P] (rest points)
                    max-y (:y (first points))
@@ -57,5 +62,10 @@
           r-points (filter (fn [p] (>= (:x p) (:bx landing))) points)
           l-shell (reverse (monotonize (reverse l-points)))
           r-shell (monotonize r-points)]
-      (comment (vec (concat (sectionize l-shell) (sectionize r-shell))))
       [(vec (sectionize l-shell)) (vec (sectionize r-shell))]))) 
+
+(defn detect-landscape [surface-data]
+  (let [points (surface-points surface-data)
+        pad (find-landing-pad points)
+        [l-rock r-rock] (surface-shell points pad)]
+    (->Landscape pad l-rock r-rock (surface-sections points))))

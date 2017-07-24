@@ -210,7 +210,7 @@
         xp (if left? bx ax)]
     (list (->Stage :descend left? pad pad xp xp ay nil))))
 
-(defn detect-stages [l l-rock pad r-rock]
+(defn detect-stages [l ^geometry.Landscape {l-rock :left-rock r-rock :right-rock pad :landing-pad}]
   (->> (descend-stage l pad)
        (brake-stage l pad)
        (hover-stages l pad l-rock r-rock)
@@ -425,8 +425,7 @@
     (+ (* dx dx)
        (* dy dy)
        (* dvx dvx)
-       (* dvy dvy)
-       ))) 
+       (* dvy dvy)))) 
 
 (defn along-guide [^Lander lander guide]
   (let [ig (first (reduce-kv (fn [[^long k ^double M :as r] ^long i ^Lander g]
@@ -438,5 +437,6 @@
     (if (> (- (count guide) 1) ig)
       (let [target (nth guide (+ 1 ig))
             cloud (along-guide-cloud lander)
-            closest (apply min-key (partial diff-landers target) cloud)]
-        (:control target)))))
+            closest (apply min-key (map (juxt (partial diff-landers target) identity) cloud))]
+        (:control closest))
+      [Double/NaN nil])))

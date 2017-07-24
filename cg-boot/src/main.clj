@@ -9,20 +9,33 @@
 (defn- read-surface [] (let [N (read)] (doall (repeatedly (* 2 N) read))))
 (defn- read-lander [] (doall (repeatedly 7 read)))
 
-(defn- make-guide [lander-data surface-data]
-  (let [s-points (surface-points surface-data)
-        i-lander (form-lander lander-data)
-        l-pad (find-landing-pad s-points)
-        surface (surface-sections s-points)
-        [l-rock r-rock] (surface-shell s-points l-pad)
-        stages (detect-stages i-lander l-rock l-pad r-rock)]
-    (do (r/update-scene :surface surface)
-        (r/update-scene :landing-pad l-pad)
-        (r/update-scene :shell (vec (concat l-rock (list l-pad) r-rock))) 
+(defn- make-guide [lander-data ^geometry.Landscape scape]
+  (let [i-lander (form-lander lander-data)
+        [l-rock l-pad r-rock] ((juxt :left-rock :landing-pad :right-rock) scape)
+        stages (detect-stages i-lander scape)]
+    (do (r/update-scene :surface (:raw-surface scape))
+        (r/update-scene :landing-pad (:landing-pad scape))
+        (r/update-scene :shell (concat l-rock (list l-pad) r-rock)) 
         (r/update-scene :stages stages))
     (let [guide (model-control (search-guide stages i-lander) i-lander)]
       (do (r/update-scene :guide-traces guide))
       (vec (apply concat (first guide) (map rest (rest guide)))))))
+
+(let [traces (atom {:guide [[]] :lander [[]]})]
+  (defn- next-trace [] (swap! traces (fn [t] (assoc t :lander (conj (:lander t) [])))))
+  (defn- next-guide [g] (swap! traces (fn [t] (assoc t :guide (concat (:guide t) g)))))
+  (defn- reset-traces [] (reset! traces {:guide [[]] :lander [[]]}))
+  (defn- sketch-traces [] (let [t (deref traces)]
+                            (r/update-scene :guide-traces (:guide t))
+                            (r/update-scene :lander-traces (:lander t))))
+  (defn- trace-move [^lander.Control control]
+    (swap! traces (fn [t] (let [t-lander (:lander t)
+                                [lts lt] (split-at (- (count t-lander) 1) t-lander)]
+                            (conj lts (conj lt (move control 1.0 ^Lander (last ))) (assoc t :lander ()))))))
+  )
+
+(defn- wait-loop [^geometry.Landscape scape ^lander.Control control])
+(defn- guide-loop [^geometry.Landscape scaple ^lander.Lander lander guide])
 
 (defn- approximate-move [^lander.Control control trace]
   (let [l (move control 1.0 ^Lander (last trace))]
@@ -31,8 +44,8 @@
                          :vx (Math/round ^double (:vx l))
                          :vy (Math/round ^double (:vy l))))))
 
-(defn- trace-move [^lander.Control control trace]
-  (conj trace (move control 1.0 ^Lander (last trace))))
+(comment (defn- trace-move [^lander.Control control trace]
+  (conj trace (move control 1.0 ^Lander (last trace)))))
 
 (defn- approximate-last [trace]
   (let [l ^Lander (last trace)]
@@ -62,8 +75,8 @@
 
   (let [; P (read-surface)
         ; L (read-lander)
-        L (:lander (test-data 1))
-        S (:surface (test-data 1))
+        L (:lander (test-data 0))
+        S (detect-landscape (:surface (test-data 0)))
         G (future (make-guide L S))]
     (dump "surface: " S)
     (dump "lander: " L)
@@ -83,24 +96,22 @@
                         t
                         (recur (trace-move control t)))))]
         (r/update-scene :lander-traces [trace-04 trace])
-        (last trace)
-        ))))
+        (last trace)))))
 
 ; eval
 
-(-main)
+(comment (-main) 
+         (def ^:private ^:const bad-cases [{:C (->Control 60 4)
+                                            :S (nth stages 2) 
+                                            :L #lander.Lander{:x 1500.0, :y 2514.4499999999994, :vx 100.0, :vy -37.10999999999999, :fuel 800,
+                                                              :control #lander.Control{:angle -15, :power 0}}}
 
-(comment (r/sketch-up)
-         (def ^:private ^:const bad-cases
-           [{:C (->Control 60 4)
-             :S (nth stages 2) 
-             :L #lander.Lander{:x 1500.0, :y 2514.4499999999994, :vx 100.0, :vy -37.10999999999999, :fuel 800,
-                               :control #lander.Control{:angle -15, :power 0}}}
-
-            {:C (->Control 20 4)
-             :S (nth stages 2)
-             :L #lander.Lander{:x 1500.3393543299987, :y 2529.3060059296076, :vx 99.64872884586892, :vy -27.17071128706871, :fuel 790,
-                               :control #lander.Control{:angle 5, :power 4}}}])
+                                           {:C (->Control 20 4)
+                                            :S (nth stages 2)
+                                            :L #lander.Lander{:x 1500.3393543299987, :y 2529.3060059296076, :vx 99.64872884586892, :vy -27.17071128706871, :fuel 790,
+                                                              :control #lander.Control{:angle 5, :power 4}}}])
+         (r/sketch-up)
+         
 
          (def ^:private ^:const bad (nth bad-cases 1)) 
 
