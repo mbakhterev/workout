@@ -9,50 +9,91 @@
 (defn- read-surface [] (let [N (read)] (doall (repeatedly (* 2 N) read))))
 (defn- read-lander [] (doall (repeatedly 7 read)))
 
+(defn- refine-guide [guide] (vec (apply concat (first guide) (map rest (rest guide)))))
+
+(defn- sketch-landscape [^geometry.Landscape scape]
+  (r/update-scene :surface (:raw-surface scape))
+  (r/update-scene :landing-pad (:landing-pad scape)) 
+  (r/update-scene :shell (apply concat ((juxt :left-rock :landing-pad :right-rock) ) l-rock (list l-pad) r-rock)))
+
 (defn- make-guide [lander-data ^geometry.Landscape scape]
   (let [i-lander (form-lander lander-data)
         [l-rock l-pad r-rock] ((juxt :left-rock :landing-pad :right-rock) scape)
         stages (detect-stages i-lander scape)]
-    (do (r/update-scene :surface (:raw-surface scape))
+    (do (sketch-landscape scape)
+        (r/update-scene :surface (:raw-surface scape))
         (r/update-scene :landing-pad (:landing-pad scape))
         (r/update-scene :shell (concat l-rock (list l-pad) r-rock)) 
         (r/update-scene :stages stages))
     (let [guide (model-control (search-guide stages i-lander) i-lander)]
       (do (r/update-scene :guide-traces guide))
+      (refine-guide guide)
       (vec (apply concat (first guide) (map rest (rest guide)))))))
 
-(let [traces (atom {:guide [[]] :lander [[]]})]
-  (defn- next-trace [] (swap! traces (fn [t] (assoc t :lander (conj (:lander t) [])))))
-  (defn- next-guide [g] (swap! traces (fn [t] (assoc t :guide (concat (:guide t) g)))))
-  (defn- reset-traces [] (reset! traces {:guide [[]] :lander [[]]}))
-  (defn- sketch-traces [] (let [t (deref traces)]
-                            (r/update-scene :guide-traces (:guide t))
-                            (r/update-scene :lander-traces (:lander t))))
+(let [traces (atom {:guide [] :lander []})]
+  (defn- reset-traces [] (reset! traces {:guide [] :lander []})) 
+
+  (defn- next-guide [g] (swap! traces (fn [t] (assoc t :guide (concat (:guide t) g))))) 
+  (defn- next-trace [^lander.Lander l]
+    (swap! traces (fn [t] (assoc t :lander (conj (:lander t) [l])))))
+
+  (defn- unpack-traces [t] (and (not (empty? t))
+                                (not (empty? (last t)))
+                                (= lander.Lander (type (last (last t))))
+                                [(drop-last t) (last t)]))
+
+  (defn- sketch-traces []
+    (let [t (deref traces)]
+      (if (unpack-traces (:guide t)) (r/update-scene :guide-traces (:guide t)))
+      (if (unpack-traces (:lander t)) (r/update-scene :lander-traces (:lander t)))))
+
   (defn- trace-move [^lander.Control control]
-    (swap! traces (fn [t] (let [t-lander (:lander t)
-                                [lts lt] (split-at (- (count t-lander) 1) t-lander)]
-                            (conj lts (conj lt (move control 1.0 ^Lander (last ))) (assoc t :lander ()))))))
-  )
+    (swap! traces (fn [T] (let [[previous current :as t] (unpack-traces (:lander T))]
+                            (assert t)
+                            (conj previous
+                                  (conj current (move control 1.0 ^Lander (last current))))))))
+  
+  (defn- approximate-last []
+    (let [[previous current :as t] (unpack-traces (:lander (deref traces)))]
+      (assert t)
+      (let [l ^lander.Lander (last current)]
+        (assoc l
+               :x (Math/round ^double (:x l))
+               :y (Math/round ^double (:y l))
+               :vx (Math/round ^double (:vx l))
+               :vy (Math/round ^double (:vy l))))))) 
 
-(defn- wait-loop [^geometry.Landscape scape ^lander.Control control])
-(defn- guide-loop [^geometry.Landscape scaple ^lander.Lander lander guide])
+(defn- wait-loop [^geometry.Landscape scape
+                  ^lander.Control control
+                  ^lander.Lander lander]
+  (next-trace lander)
+  (let [G (future (make-guide scape lander))]
+    (loop [g (deref G 128 nil)]
+      (if g 
+        (do (next-guide g))
+        (do (trace-move control)
+                  (recur (deref G 128 nil)))))))
 
-(defn- approximate-move [^lander.Control control trace]
-  (let [l (move control 1.0 ^Lander (last trace))]
-    (conj trace (assoc l :x (Math/round ^double (:x l))
-                         :y (Math/round ^double (:y l))
-                         :vx (Math/round ^double (:vx l))
-                         :vy (Math/round ^double (:vy l))))))
+(defn- guide-loop [^geometry.Landscape scaple
+                   ^lander.Lander lander
+                   guide])
 
-(comment (defn- trace-move [^lander.Control control trace]
-  (conj trace (move control 1.0 ^Lander (last trace)))))
+(comment (defn- approximate-move [^lander.Control control trace]
+           (let [l (move control 1.0 ^Lander (last trace))]
+             (conj trace (assoc l :x (Math/round ^double (:x l))
+                                :y (Math/round ^double (:y l))
+                                :vx (Math/round ^double (:vx l))
+                                :vy (Math/round ^double (:vy l))))))
 
-(defn- approximate-last [trace]
-  (let [l ^Lander (last trace)]
-    (assoc l :x (Math/round ^double (:x l))
-             :y (Math/round ^double (:y l))
-             :vx (Math/round ^double (:vx l))
-             :vy (Math/round ^double (:vy l)))))
+         (defn- trace-move [^lander.Control control trace]
+           (conj trace (move control 1.0 ^Lander (last trace))))
+
+         (defn- approximate-last [trace]
+           (let [l ^Lander (last trace)]
+             (assoc l :x (Math/round ^double (:x l))
+                    :y (Math/round ^double (:y l))
+                    :vx (Math/round ^double (:vx l))
+                    :vy (Math/round ^double (:vy l))))))
 
 ; Тестовые данные
 (def ^:private ^:const test-data [{:surface [0 1000 300 1500 350 1400 500 2000
