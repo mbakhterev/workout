@@ -156,7 +156,7 @@
 
           (if-let [traces (:guide-traces sc)]
             (doseq [t traces]
-              (doseq [l (:trace t)] (draw-lander l [255 0 0] [0 0 255]))
+              (doseq [l (:trace t)] (draw-lander l [0 0 255] [0 0 255]))
               (let [l (last (:trace t))
                     m (:mark t)
                     text-width (q/text-width m)]
@@ -164,7 +164,7 @@
           
           (if-let [traces (:lander-traces sc)]
             (doseq [t traces]
-              (doseq [l (:trace t)] (draw-lander l [128 255 0] [0 255 0]))
+              (doseq [l (:trace t)] (draw-lander l [255 0 0] [255 0 0]))
               (let [l (last (:trace t))
                     m (:mark t)
                     text-width (q/text-width m)]

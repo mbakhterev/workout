@@ -76,14 +76,17 @@
                   ^lander.Control control
                   ^lander.Lander lander]
   (next-trace lander)
-  (let [G (future (make-guide lander scape))]
-    (loop [l lander g (deref G quanta nil)]
-      (if g 
-        (do (dump "guide computation is DONE")
-            [l g])
-        (do (dump "waiting for guide with control:" control)
-            (trace-move control)
-            (recur (approximate-last) (deref G quanta nil)))))))
+  (loop [l lander G (future (make-guide lander scape)) steps 0]
+    (if-let [g (deref G quanta nil)] 
+      (do (dump "guide computation is DONE." "steps:" steps "guide length:" (count g))
+          (if (empty? g)
+            (do (trace-move control)
+                (let [tl (approximate-last)]
+                  (recur tl (future (make-guide tl scape)) 0)))
+            [l g]))
+      (do (dump "waiting for guide with control:" control)
+          (trace-move control)
+          (recur (approximate-last) G (+ 1 steps))))))
 
 (def ^:private ^:const tolerable-drift (* 4.0 4.0))
 
@@ -121,7 +124,7 @@
 
 (defn -main [& args]
   (reset-state)
-  (let [T (test-data 0)
+  (let [T (test-data 1)
         S (detect-landscape (:surface T))
         L (form-lander (:lander T))]
     (sketch-landscape S)
@@ -192,3 +195,13 @@
          (map :x-goal (hover-stages i-lander l-pad l-shell r-shell (list)))
          (identity stages)
          (map (juxt :stage :x-goal) stages))
+
+(defn bad-test []
+  (let [bad-l
+        #lander.Lander{:x 1751.0, :y 2522.0, :vx 108.0, :vy -21.0, :fuel 774,
+                       :control #lander.Control{:angle -5, :power 3}}
+        scape (detect-landscape (:surface (test-data 0)))
+        stages (detect-stages bad-l scape)
+        guide (make-guide bad-l scape)]
+    (map :stage stages)
+    (search-guide stages bad-l))) 

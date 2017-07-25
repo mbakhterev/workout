@@ -5,7 +5,7 @@
 (comment
   (defn debugln [flag & args]
     (let [flags (hash-set ; :hover-search
-                          ; :search-guide
+                            :search-guide
                           ; :solve-hover
                           ; :brake-integrate
                           ; :solve-brake-4
@@ -17,7 +17,7 @@
                           )]
       (if (flags flag) (binding [*out* *err*] (apply println args))))))
 
-(defn- debugln [& args] nil)
+(defn debugln [& args] nil)
 
 (defrecord Control [^long angle ^long power])
 
@@ -224,9 +224,9 @@
 (defn search-guide [stages ^Lander lander]
   (if-let [s (first stages)]
     (case (:stage s)
-      :brake (brake-guide s (rest stages) lander)
-      :hover (hover-guide s (rest stages) lander)
-      :descend (descend-guide s lander)
+      :brake (do (debugln :search-guide "brake") (brake-guide s (rest stages) lander))
+      :hover (do (debugln :search-guide "hover")(hover-guide s (rest stages) lander))
+      :descend (do (debugln :search-guide "brake") (descend-guide s lander))
       (list))))
 
 (defn- near-zero? [^double a] (> 1E-10 (Math/abs a)))
