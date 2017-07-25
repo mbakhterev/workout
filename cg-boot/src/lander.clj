@@ -3,7 +3,7 @@
 (set! *warn-on-reflection* true)
 
 (comment
-  (defn- debugln [flag & args]
+  (defn debugln [flag & args]
     (let [flags (hash-set ; :hover-search
                           ; :search-guide
                           ; :solve-hover
@@ -12,9 +12,10 @@
                           ; :hover-guide
                           ; :hover-integrate
                           ; :solve-descend-one
-                          :along-guide
+                          ; :along-guide
+                          :make-guide
                           )]
-      (if (flags flag) (apply println args)))))
+      (if (flags flag) (binding [*out* *err*] (apply println args))))))
 
 (defn- debugln [& args] nil)
 
@@ -428,14 +429,15 @@
        (* dvy dvy)))) 
 
 (defn along-guide [^Lander lander guide]
-  (let [ig (first (reduce-kv (fn [[^long k ^double M :as r] ^long i ^Lander g]
-                               (let [mi (diff-landers lander g)]
-                                 (if (<= M mi) r [i mi])))
-                             [0 (diff-landers lander (nth guide 0))]
-                             guide))]
-    (debugln :along-guide "ig:" ig)
-    (if (> (- (count guide) 1) ig)
-      (let [target (nth guide (+ 1 ig))
-            cloud (along-guide-cloud lander)
-            [delta closest] (apply min-key first (map (juxt (partial diff-landers target) identity) cloud))]
-        [delta (:control closest)]))))
+  (if (not (empty? guide))
+    (let [ig (first (reduce-kv (fn [[^long k ^double M :as r] ^long i ^Lander g]
+                                 (let [mi (diff-landers lander g)]
+                                   (if (<= M mi) r [i mi])))
+                               [0 (diff-landers lander (nth guide 0))]
+                               guide))]
+      (debugln :along-guide "ig:" ig)
+      (if (> (- (count guide) 1) ig)
+        (let [target (nth guide (+ 1 ig))
+              cloud (along-guide-cloud lander)
+              [delta closest] (apply min-key first (map (juxt (partial diff-landers target) identity) cloud))]
+          [delta (:control closest)])))))

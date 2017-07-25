@@ -37,7 +37,7 @@
   (defn- unpack-traces [t] (and (not (empty? t))
                                 (not (empty? (last t)))
                                 (= lander.Lander (type (last (last t))))
-                                [(drop-last t) (last t)]))
+                                [(vec (drop-last t)) (vec (last t))]))
 
   (defn- sketch-state []
     (let [st (deref state)]
@@ -64,6 +64,7 @@
   (let [stages (detect-stages i-lander scape)]
     (next-stages stages)
     (sketch-state)
+    (debugln :make-guide stages)
     (let [guide (model-control (search-guide stages i-lander) i-lander)]
       (next-guide guide)
       (sketch-state)
@@ -91,7 +92,10 @@
   (loop [l lander steps 0]
     (if-let [[delta control] (along-guide l guide)]
       (if (> delta tolerable-drift)
-        (do (dump "guide drift is too large. Correction is needed. delta:" delta "steps:" steps "x:" (:x (approximate-last)))
+        (do (dump "guide drift is too large. Correction is needed."
+                  "delta:" delta
+                  "steps:" steps
+                  "x:" (:x (approximate-last)))
             l)
         (do (trace-move control)
             (recur (approximate-last) (+ 1 steps))))
@@ -123,7 +127,10 @@
     (sketch-landscape S)
     (loop [l L]
       (let [[lw g] (wait-loop S (->Control 0 4) l)]
-        (if-let [lg (guide-loop lw g)] (recur lg))))))
+        (dump "guide length:" (count g))
+        (if-let [lg (guide-loop lw g)]
+          (recur lg)
+          (approximate-last))))))
 
 (comment (defn -main [& args]
   (comment (r/sketch-up))
