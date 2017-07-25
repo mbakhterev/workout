@@ -59,9 +59,9 @@
                            :surface (correct-surface value)
                            :shell (correct-surface value)
                            :landing-pad (correct-y-section (scale-section value))
-                           :guide-traces (map correct-trace value)
-                           :lander-traces (map correct-trace value)
-                           :stages (keep correct-stage value))
+                           :guide-traces (if value (map correct-trace value))
+                           :lander-traces (if value (map correct-trace value))
+                           :stages (if value (keep correct-stage value)))
                      :redraw true)
   true)
 

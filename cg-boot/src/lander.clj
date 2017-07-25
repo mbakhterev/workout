@@ -437,6 +437,5 @@
     (if (> (- (count guide) 1) ig)
       (let [target (nth guide (+ 1 ig))
             cloud (along-guide-cloud lander)
-            closest (apply min-key (map (juxt (partial diff-landers target) identity) cloud))]
-        (:control closest))
-      [Double/NaN nil])))
+            [delta closest] (apply min-key first (map (juxt (partial diff-landers target) identity) cloud))]
+        [delta (:control closest)]))))
