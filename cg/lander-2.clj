@@ -550,7 +550,7 @@
         (do (dump "guide drift is too large. Correction is needed."
                   "delta:" delta
                   "steps:" steps
-                  "x:" (:x (approximate-last)))
+                  "x:" (:x l))
             l)
         (do (dump "delta is ok:" delta)
             (trace-move control)
