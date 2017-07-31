@@ -80,7 +80,8 @@
     (if-let [g (deref G quanta nil)] 
       (do (dump "guide computation is DONE." "steps:" steps "guide length:" (count g))
           (if (empty? g)
-            (do (trace-move control)
+            (do (dump "guide computation is FAILED. Continuing with routine")
+                (trace-move control)
                 (let [tl (approximate-last)]
                   (recur tl (future (make-guide tl scape)) 0)))
             [l g]))
@@ -100,7 +101,8 @@
                   "steps:" steps
                   "x:" (:x (approximate-last)))
             l)
-        (do (trace-move control)
+        (do (dump "delta is ok:" delta)
+            (trace-move control)
             (recur (approximate-last) (+ 1 steps))))
       (do (dump "guide following is DONE")
           (sketch-state)
@@ -119,12 +121,14 @@
                                              200 3200 1000 3500 500 3800 800 4000 200
                                              4200 800 4800 600 5000 1200 5500 900
                                              6000 500 6500 300 6999 500]
-                                   
-                                   :lander [6500 2700 -50 0 1000 90 0]}])
+                                   :lander [6500 2700 -50 0 1000 90 0]}
+                                  
+                                  {:surface [0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800]
+                                   :lander [6500 2800 -90 0 750 90 0]}])
 
 (defn -main [& args]
   (reset-state)
-  (let [T (test-data 1)
+  (let [T (test-data 2)
         S (detect-landscape (:surface T))
         L (form-lander (:lander T))]
     (sketch-landscape S)
@@ -134,36 +138,6 @@
         (if-let [lg (guide-loop lw g)]
           (recur lg)
           (approximate-last))))))
-
-(comment (defn -main [& args]
-  (comment (r/sketch-up))
-
-  (let [; P (read-surface)
-        ; L (read-lander)
-        L (:lander (test-data 0))
-        S (detect-landscape (:surface (test-data 0)))
-        G (future (make-guide L S))]
-    (dump "surface: " S)
-    (dump "lander: " L)
-
-    (let [[guide trace-04] (loop [t [(form-lander L)] g (deref G 128 nil)]
-                             (if g
-                               [g t]
-                               (recur (trace-move (->Control 0 4) t)
-                                      (deref G 128 nil))))]
-      (dump "guide-length:" (count guide))
-      (dump "trace:" trace-04)
-      (r/update-scene :lander-traces [trace-04])
-      
-      (let [trace (loop [t [(last trace-04)]]
-                    (let [control (along-guide (approximate-last t) guide)]
-                      (if (nil? control)
-                        t
-                        (recur (trace-move control t)))))]
-        (r/update-scene :lander-traces [trace-04 trace])
-        (last trace))))))
-
-; eval
 
 (comment (-main) 
          (def ^:private ^:const bad-cases [{:C (->Control 60 4)
@@ -205,3 +179,10 @@
         guide (make-guide bad-l scape)]
     (map :stage stages)
     (search-guide stages bad-l))) 
+
+(defn bad-test-2 []
+  (let [T (test-data 2)
+        L (form-lander (:lander T))
+        S (detect-landscape (:surface T))
+        stages (detect-stages L S)]
+    L))

@@ -64,7 +64,7 @@
           r-shell (monotonize r-points)]
       [(vec (sectionize l-shell)) (vec (sectionize r-shell))]))) 
 
-(defn detect-landscape [surface-data]
+(defn- detect-landscape [surface-data]
   (let [points (surface-points surface-data)
         pad (find-landing-pad points)
         [l-rock r-rock] (surface-shell points pad)]
@@ -74,7 +74,7 @@
 
 (set! *warn-on-reflection* true)
 
-(defn debugln [flag & args]
+(defn- debugln [flag & args]
   (comment (let [flags (hash-set ; :hover-search
                                  :search-guide
                                  ; :solve-hover
@@ -97,7 +97,7 @@
                    ^long fuel
                    ^Control control])
 
-(defn form-lander [nums]
+(defn- form-lander [nums]
   (let [[m c] (split-at 5 nums)]
     (apply ->Lander (conj (vec m) (apply ->Control c))))) 
 
@@ -145,7 +145,7 @@
 ; модуля и то управление, которое привело его в это положение. Положение -
 ; вектор в фазовом пространстве (vec x y dx dy fuel)
  
-(defn move [^Control ctl
+(defn- move [^Control ctl
             ^double t
             ^Lander {lc :control :as l}] 
   (let [{angle :angle power :power :as nc} (control-to lc ctl)
@@ -180,7 +180,7 @@
 
 (defn- on-radar? [^Lander {x :x y :y}] (and (<= 0 x x-max) (<= 0 y y-max)))
 
-(defn alive? [^geometry.Section surface ^Lander {x :x y :y :as lander}]
+(defn- alive? [^geometry.Section surface ^Lander {x :x y :y :as lander}]
   (and (on-radar? lander)
        (over-line? lander (first (filter (partial in-range? lander) surface)))))
 
@@ -271,7 +271,7 @@
         xp (if left? bx ax)]
     (list (->Stage :descend left? pad pad xp xp ay nil))))
 
-(defn detect-stages [l ^geometry.Landscape {l-rock :left-rock r-rock :right-rock pad :landing-pad}]
+(defn- detect-stages [l ^geometry.Landscape {l-rock :left-rock r-rock :right-rock pad :landing-pad}]
   (->> (descend-stage l pad)
        (brake-stage l pad)
        (hover-stages l pad l-rock r-rock)
@@ -281,7 +281,7 @@
          brake-guide
          descend-guide)
 
-(defn search-guide [stages ^Lander lander]
+(defn- search-guide [stages ^Lander lander]
   (if-let [s (first stages)]
     (case (:stage s)
       :brake (do (debugln :search-guide "brake") (brake-guide s (rest stages) lander))
@@ -465,7 +465,7 @@
         :done R
         :ok (recur (:lander m) (cons m R))))))
 
-(defn model-control [guide ^Lander lander]
+(defn- model-control [guide ^Lander lander]
   (letfn [(do-control [moves ^Lander l]
             (when-first [{{ctl :control} :lander t :dt} moves]
               (let [landers (take (+ 1 t) (iterate (partial move ctl 1.0) l))]
@@ -488,7 +488,7 @@
        (* dvx dvx)
        (* dvy dvy)))) 
 
-(defn along-guide [^Lander lander guide]
+(defn- along-guide [^Lander lander guide]
   (if (not (empty? guide))
     (let [ig (first (reduce-kv (fn [[^long k ^double M :as r] ^long i ^Lander g]
                                  (let [mi (diff-landers lander g)]

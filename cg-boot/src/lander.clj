@@ -2,22 +2,19 @@
 
 (set! *warn-on-reflection* true)
 
-(comment
-  (defn debugln [flag & args]
-    (let [flags (hash-set ; :hover-search
-                            :search-guide
-                          ; :solve-hover
-                          ; :brake-integrate
-                          ; :solve-brake-4
-                          ; :hover-guide
-                          ; :hover-integrate
-                          ; :solve-descend-one
-                          ; :along-guide
-                          :make-guide
-                          )]
-      (if (flags flag) (binding [*out* *err*] (apply println args))))))
-
-(defn debugln [& args] nil)
+(defn debugln [flag & args]
+  (let [flags (hash-set ; :hover-search
+                        ;  :search-guide
+                        ; :solve-hover
+                        ; :brake-integrate
+                        ; :solve-brake-4
+                        ; :hover-guide
+                        ; :hover-integrate
+                        ; :solve-descend-one
+                        ; :along-guide
+                        :make-guide
+                        )]
+    (if (flags flag) (binding [*out* *err*] (apply println args)))))
 
 (defrecord Control [^long angle ^long power])
 
