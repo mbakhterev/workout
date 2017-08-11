@@ -1,4 +1,5 @@
-(ns lander (:require [geometry :refer :all]))
+(ns lander (:require [geometry :refer :all]
+                     [roots :refer :all]))
 
 (set! *warn-on-reflection* true)
 
@@ -40,7 +41,7 @@
 
 (defrecord Constraint [^double x ^double h ^double t])
 
-(defrecord Roots [^double left ^double right])
+; (defrecord Roots [^double left ^double right])
 
 (defrecord Move [state ^Lander lander ^double dt])
 
@@ -63,7 +64,12 @@
       sin (fn [a] (Math/sin (Math/toRadians (+ 90 a))))
       x-force (fn ^double [a p] (* p (cos a)))
       y-force (fn ^double [a p] (- (* p (sin a)) M))
-      make-table (fn [f] (vec (for [p (range 0 5)] (vec (for [a (range -90 91)] (f a p))))))
+      to-zero (fn [^double a] (if (> 1E-10 (Math/abs a)) 0.0 a))
+
+      make-table (fn [f] (vec (for [p (range 0 5)]
+                                (vec (for [a (range -90 91)]
+                                       (to-zero (f a p)))))))
+
       x-table (make-table x-force)
       y-table (make-table y-force)]
   (defn- x-acceleration [^long a ^long p] ((x-table p) (+ 90 a)))
@@ -226,31 +232,31 @@
       :descend (do (debugln :search-guide "brake") (descend-guide s lander))
       (list))))
 
-(defn- near-zero? [^double a] (> 1E-10 (Math/abs a)))
+; (defn- near-zero? [^double a] (> 1E-10 (Math/abs a)))
 
-(defn- solve-square-equation [^double a ^double b ^double c]
-  (if (near-zero? a) 
-    (if (not= 0.0 b)
-      (let [t (/ (- c) b)] (->Roots t t)))
-    (let [D (- (* b b) (* 4.0 a c))]
-      (if (<= 0.0 D)
-        (let [D-sqrt (Math/sqrt D)
-              a-rcpr (/ (* 2.0 a))
-              tp     (* (+ (- b) D-sqrt) a-rcpr)
-              tm     (* (- (- b) D-sqrt) a-rcpr)]
-          (->Roots (min tp tm) (max tp tm)))))))
+; (defn- solve-square-equation [^double a ^double b ^double c]
+;   (if (near-zero? a) 
+;     (if (not= 0.0 b)
+;       (let [t (/ (- c) b)] (->Roots t t)))
+;     (let [D (- (* b b) (* 4.0 a c))]
+;       (if (<= 0.0 D)
+;         (let [D-sqrt (Math/sqrt D)
+;               a-rcpr (/ (* 2.0 a))
+;               tp     (* (+ (- b) D-sqrt) a-rcpr)
+;               tm     (* (- (- b) D-sqrt) a-rcpr)]
+;           (->Roots (min tp tm) (max tp tm)))))))
 
 ; Необходимо найти экстремальную точку на отрезке [0; t]
 
-(defn- square-extremum [^double a ^double b ^double c ^double t]
-  (if (near-zero? a)
-    (+ (* b t) c)
-    (let [tx (/ (- b) a 2.0)]
-      (if (<= 0.0 tx t)
-        (+ (* a tx tx) (* b tx) c)
-        (if (< t tx)
-          (+ (* a t t) (* b t) c)
-          c)))))
+; (defn- square-extremum [^double a ^double b ^double c ^double t]
+;   (if (near-zero? a)
+;     (+ (* b t) c)
+;     (let [tx (/ (- b) a 2.0)]
+;       (if (<= 0.0 tx t)
+;         (+ (* a tx tx) (* b tx) c)
+;         (if (< t tx)
+;           (+ (* a t t) (* b t) c)
+;           c)))))
 
 (defn- solve-hover [^Lander {x :x vx :vx {a :angle p :power :as ctl} :control :as l}
                     ^Stage {x-target :x-goal}]

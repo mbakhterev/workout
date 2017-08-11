@@ -1,6 +1,7 @@
 (ns main (:gen-class)
          (:require [lander :refer :all]
                    [geometry :refer :all]
+                   [roots :refer :all]
                    [render :as r]))
 
 (set! *warn-on-reflection* true)
@@ -37,7 +38,8 @@
   (defn- unpack-traces [t] (and (not (empty? t))
                                 (not (empty? (last t)))
                                 (= lander.Lander (type (last (last t))))
-                                [(vec (drop-last t)) (vec (last t))]))
+                                ; [(vec (drop-last t)) (vec (last t))]
+                                [(drop-last t) (last t)]))
 
   (defn- sketch-state []
     (let [st (deref state)]
@@ -128,7 +130,7 @@
 
 (defn -main [& args]
   (reset-state)
-  (let [T (test-data 2)
+  (let [T (test-data 1)
         S (detect-landscape (:surface T))
         L (form-lander (:lander T))]
     (sketch-landscape S)
@@ -168,7 +170,8 @@
          (map (fn [[a b]] (println "a:" a "b:" b) (make-section a b)) (partition 2 1 s-points))
          (map :x-goal (hover-stages i-lander l-pad l-shell r-shell (list)))
          (identity stages)
-         (map (juxt :stage :x-goal) stages))
+         (map (juxt :stage :x-goal) stages)
+         (intersect-time  [0.1 10 0] [-0.3 0 0] [0 1 14 2]))
 
 (defn bad-test []
   (let [bad-l
