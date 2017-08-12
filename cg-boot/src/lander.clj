@@ -99,15 +99,15 @@
 (defn- in-range? [^Lander {x :x} ^geometry.Section {ax :ax bx :bx}]
   (and (<= ax x) (< x bx)))
 
-(defn- over-line? [^Lander {x :x y :y} ^geometry.Section {ax :ax ay :ay k :k}]
-  (let [min-height 32.0
-        rx (- x ax)
-        ry (- y ay)]
-    (< (+ (* k rx) min-height) ry)))
+(defn- lander-over-line? [^Lander {x :x y :y} ^geometry.Section {ax :ax ay :ay k :k}]
+           (let [min-height 32.0
+                 rx (- x ax)
+                 ry (- y ay)]
+             (< (+ (* k rx) min-height) ry)))
 
 (defn- over-section? [^Lander lander ^geometry.Section section]
   (and (in-range? lander section)
-       (over-line? lander section)))
+       (lander-over-line? lander section)))
 
 (def ^:const ^:private x-max (- 7000.0 1.0))
 (def ^:const ^:private y-max (- 3000.0 1.0))
@@ -116,7 +116,7 @@
 
 (defn alive? [^geometry.Section surface ^Lander {x :x y :y :as lander}]
   (and (on-radar? lander)
-       (over-line? lander (first (filter (partial in-range? lander) surface)))))
+       (lander-over-line? lander (first (filter (partial in-range? lander) surface)))))
 
 ; Рассчёты для стадии последнего снижения: погашение вертикальной скорости с
 ; управлением (vec 0 4) 
@@ -258,20 +258,28 @@
 ;           (+ (* a t t) (* b t) c)
 ;           c)))))
 
+; (defn- solve-hover [^Lander {x :x vx :vx {a :angle p :power :as ctl} :control :as l}
+;                     ^Stage {x-target :x-goal}]
+;   (let [ax (x-acceleration a p)
+;         r  (solve-square-equation (* 0.5 ax) vx (- x x-target))]
+;     (if r 
+;       (let [{tl :left tr :right} r
+;             tm (Math/ceil (if (<= 0.0 tl) tl tr))]
+;         (if (<= 0.0 tm) 
+;           (->Move :ok (move ctl tm l) tm))))))
+
 (defn- solve-hover [^Lander {x :x vx :vx {a :angle p :power :as ctl} :control :as l}
                     ^Stage {x-target :x-goal}]
   (let [ax (x-acceleration a p)
-        r  (solve-square-equation (* 0.5 ax) vx (- x x-target))]
-    (if r 
-      (let [{tl :left tr :right} r
-            tm (Math/ceil (if (<= 0.0 tl) tl tr))]
-        (if (<= 0.0 tm) 
-          (->Move :ok (move ctl tm l) tm))))))
+        r  (positive-root-of-square-equation (* 0.5 ax) vx (- x x-target))]
+    (if-not (Double/isNaN r) 
+      (let [tm (Math/ceil r)]
+        (->Move :ok (move ctl tm l) tm)))))
 
 (defn- hover-align-control [^Stage {section :section :as stage} ^Lander lander ^Control ctl]
   (loop [l lander t 0.0]
     (cond (not (on-radar? l))          (->Move :ko l 0.0)
-          (not (over-line? l section)) (->Move :ko l 0.0)
+          (not (lander-over-line? l section)) (->Move :ko l 0.0)
           (not (in-range? l section))  (if (constraint l stage) (->Move :out l t)  (->Move :ko l 0.0))
           (= ctl (:control l))         (->Move :ok l t)
           :else                        (recur (move ctl 1.0 l) (+ 1.0 t)))))
@@ -282,7 +290,7 @@
     (let [{l :lander t :dt} m]
       (if (and (constraint l stage)
                (on-radar? l)
-               (over-line? l section)
+               (lander-over-line? l section)
                (> (- y-max 10) (square-extremum (* 0.5 (y-acceleration a p)) vy y t)))
         m))))
 

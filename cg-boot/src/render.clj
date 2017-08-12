@@ -22,7 +22,8 @@
                (* factor-x (:bx s))
                (* factor-y (:by s))
                (* factor-k (:k s))
-               (* factor-x (:mx s))))
+               (* factor-x (:mx s))
+               nil))
 
 (defn- invert-y [^double y] (- display-height y))
 
@@ -30,7 +31,8 @@
   (g/->Section (:ax s) (invert-y (:ay s))
                (:bx s) (invert-y (:by s))
                (:k s)
-               (:mx s)))
+               (:mx s)
+               nil))
 
 (defn- correct-surface [sections]
   (map (comp correct-y-section scale-section) sections))

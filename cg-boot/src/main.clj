@@ -35,11 +35,13 @@
   (defn- next-stages [s]
     (swap! state (fn [st] (assoc st :stages (conj (:stages st) s)))))
 
-  (defn- unpack-traces [t] (and (not (empty? t))
-                                (not (empty? (last t)))
-                                (= lander.Lander (type (last (last t))))
-                                ; [(vec (drop-last t)) (vec (last t))]
-                                [(drop-last t) (last t)]))
+  (defn- unpack-traces [t]
+;    (comment (println (type (last (last t)))))
+    (and (not (empty? t))
+         (not (empty? (last t)))
+         (= lander.Lander (type (last (last t))))
+         ; [(vec (drop-last t)) (vec (last t))]
+         [(drop-last t) (last t)]))
 
   (defn- sketch-state []
     (let [st (deref state)]
@@ -171,7 +173,7 @@
          (map :x-goal (hover-stages i-lander l-pad l-shell r-shell (list)))
          (identity stages)
          (map (juxt :stage :x-goal) stages)
-         (intersect-time  [0.1 10 0] [-0.3 0 0] [0 1 14 2]))
+         (intersect-time  [0.1 10 0] [-0.3 0 0] [0 -21 14 -1]))
 
 (defn bad-test []
   (let [bad-l
