@@ -99,11 +99,13 @@
 (defn- in-range? [^Lander {x :x} ^geometry.Section {ax :ax bx :bx}]
   (and (<= ax x) (< x bx)))
 
-(defn- lander-over-line? [^Lander {x :x y :y} ^geometry.Section {ax :ax ay :ay k :k}]
+(comment (defn- lander-over-line? [^Lander {x :x y :y} ^geometry.Section {ax :ax ay :ay k :k}]
            (let [min-height 32.0
                  rx (- x ax)
                  ry (- y ay)]
-             (< (+ (* k rx) min-height) ry)))
+             (< (+ (* k rx) min-height) ry))))
+
+(defn- lander-over-line? [^Lander {x :x y :y} ^geometry.Section {l :line}] (over-line? l x y))
 
 (defn- over-section? [^Lander lander ^geometry.Section section]
   (and (in-range? lander section)
@@ -171,20 +173,17 @@
           xp (if left? bx ax)]
       (cons (->Stage :brake left? pad pad xp xp ay nil) stages))))
 
-(comment (defn- hover-stages [^Lander {x :x}
-                              ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
-                              l-rock r-rock stages] 
-           (let [on-left (fn [s] (if (< x (:bx s) bx) (->Stage :hover true s pad (:bx s) bx ay nil)))
-                 on-right (fn [s] (if (> x (:ax s) ax) (->Stage :hover false s pad (:ax s) ax ay nil)))]
-             (concat (cond (< x ax) (keep on-left l-rock)
-                           (> x bx) (keep on-right (reverse r-rock)))
-                     stages))))
-
-(defn hover-stages [^Lander {x :x :as l}
-                   ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
-                    l-rock r-rock stages]
-  (letfn [(on-left [^Stage s] (if (< x (:bx s) bx) (map (fn [^double t] (->Stage :hover true s pad t bx ay nil)) (divide-stage (max x (:ax s)) (:bx s)))))
-          (on-right [^Stage s] (if (> x (:ax s) ax) (map (fn  [^double t] (->Stage :hover false s pad t ax ay nil)) (divide-stage  (min x (:bx s)) (:ax s)))))
+(defn- hover-stages [^Lander {x :x :as l}
+                     ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+                     l-rock r-rock stages]
+  (letfn [(on-left [^Stage s]
+            (if (< x (:bx s) bx)
+              (map (fn [^double t] (->Stage :hover true s pad t bx ay nil))
+                   (divide-stage (max x (:ax s)) (:bx s)))))
+          (on-right [^Stage s]
+            (if (> x (:ax s) ax)
+              (map (fn  [^double t] (->Stage :hover false s pad t ax ay nil))
+                   (divide-stage  (min x (:bx s)) (:ax s)))))
           (divide-stage [^double a ^double t]
             (if (< (Math/abs (- t a)) 2048.0)
               (list t)

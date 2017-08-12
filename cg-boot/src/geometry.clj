@@ -13,7 +13,7 @@
 
 (defrecord Line [^double x ^double y ^double nx ^double ny])
 
-; Отрезок поверхности. k и mx - это наклон и середина отрезка по оси x. Line
+; Отрезок поверхности. K и mx - это наклон и середина отрезка по оси x. Line
 ; задаёт линию, которую нельзя пересекать при полёте над секцией.
 
 (defrecord Section [^double ax ^double ay
@@ -40,15 +40,14 @@
 (def ^:const ^:private uplift 32.0)
 
 (defn- make-section [^Point a ^Point b]
-  (let [l (make-line (assoc a :y (+ uplift (:y a)))
-                     (assoc b :y (+ uplift (:y b))))]
-    (->Section (:x a) (:y a)
-               (:x b) (:y b)
-               (double (/ (- (:y b) (:y a))
-                          (- (:x b) (:x a))))
-               (+ (:x a)
-                  (/ (- (:x b) (:x a)) 2.0))
-               l)))
+  (->Section (:x a) (:y a)
+             (:x b) (:y b)
+             (double (/ (- (:y b) (:y a))
+                        (- (:x b) (:x a))))
+             (+ (:x a)
+                (/ (- (:x b) (:x a)) 2.0))
+             (make-line (assoc a :y (+ uplift (:y a)))
+                        (assoc b :y (+ uplift (:y b))))))
 
 (defn over-line? [^Line {x :x y :y nx :nx ny :ny} tx ty]
   (< 0 (+ (* nx (- tx x))

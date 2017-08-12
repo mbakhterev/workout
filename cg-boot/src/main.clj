@@ -1,7 +1,6 @@
 (ns main (:gen-class)
          (:require [lander :refer :all]
                    [geometry :refer :all]
-                   [roots :refer :all]
                    [render :as r]))
 
 (set! *warn-on-reflection* true)
@@ -36,7 +35,6 @@
     (swap! state (fn [st] (assoc st :stages (conj (:stages st) s)))))
 
   (defn- unpack-traces [t]
-;    (comment (println (type (last (last t)))))
     (and (not (empty? t))
          (not (empty? (last t)))
          (= lander.Lander (type (last (last t))))
