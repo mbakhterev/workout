@@ -147,3 +147,74 @@
         b (+ (* nx vx) (* ny vy))
         c (+ (* nx (- x x0)) (* ny (- y y0)))]
     (positive-root-of-square-equation a b c))) 
+
+; Построение стадий полёта.
+
+(declare descend-stage
+         brake-stage
+         hover-stages
+         reverse-stage)
+
+(defn detect-stages [^double x ^double vx
+                     ^Landscape {l-rock :left-rock r-rock :right-rock pad :landing-pad}]
+  ((comp (partial reverse-stage x vx)
+         (partial hover-stages x vx)
+         (partial brake-stage x vx)
+         (partial descend-stage x vx)
+         ))
+  (->> (descend-stage l pad)
+       (brake-stage l pad)
+       (hover-stages l pad l-rock r-rock)
+       (reverse-stage l pad l-rock r-rock)))
+
+(defn- brake-stage [^Lander {x :x vx :vx :as lander}
+                    ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+                    stages]
+  (if (and (= 0 vx) (in-range? lander pad))
+    stages
+    (let [left? (or (< x ax) (< 0.0 vx))
+          xp (if left? bx ax)]
+      (cons (->Stage :brake left? pad pad xp xp ay nil) stages))))
+
+(defn- hover-stages [^Lander {x :x :as l}
+                     ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+                     l-rock r-rock stages]
+  (letfn [(on-left [^Stage s]
+            (if (< x (:bx s) bx)
+              (map (fn [^double t] (->Stage :hover true s pad t bx ay nil))
+                   (divide-stage (max x (:ax s)) (:bx s)))))
+          (on-right [^Stage s]
+            (if (> x (:ax s) ax)
+              (map (fn  [^double t] (->Stage :hover false s pad t ax ay nil))
+                   (divide-stage  (min x (:bx s)) (:ax s)))))
+          (divide-stage [^double a ^double t]
+            (if (< (Math/abs (- t a)) 2048.0)
+              (list t)
+              (let [m (+ a (/ (- t a) 2.0))] (concat (divide-stage a m) (divide-stage m t)))))]
+    (concat (cond (< x ax) (mapcat on-left l-rock)
+                  (> x bx) (mapcat on-right (reverse r-rock)))
+      stages)))
+
+(defn- reverse-stage [^Lander {x :x vx :vx :as lander}
+                      ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+                      l-rock r-rock stages]
+  (if-not (or (and (< x ax) (< vx 0.0))
+              (and (> x bx) (> vx 0.0)))
+    stages
+    (let [left? (< x ax)
+          rock (if left? l-rock r-rock)
+          s (first (filter (partial in-range? lander) rock))
+          surface (if left?
+                    (take-while (fn [r] (<= (:ax r) x)) rock)
+                    (drop-while (fn [r] (<= (:bx r) x)) rock))]
+      (cons (->Stage :reverse left? s pad (if left? (:bx s) (:ax s)) (if left? bx ax) ay surface)
+            stages))))
+
+(defn- descend-stage [^Lander {x :x}
+                      ^geometry.Section {ax :ax ay :ay bx :bx :as pad}]
+  (let [left? (< x ax)
+        xp (if left? bx ax)]
+    (list (->Stage :descend left? pad pad xp xp ay nil))))
+
+
+
