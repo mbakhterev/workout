@@ -131,7 +131,7 @@
 (defn -main [& args]
   (reset-state)
   (let [T (test-data 1)
-        S (detect-landscape (:surface T))
+        S (build-landscape (:surface T))
         L (form-lander (:lander T))]
     (sketch-landscape S)
     (loop [l L]
@@ -139,7 +139,7 @@
         (dump "guide length:" (count g))
         (if-let [lg (guide-loop lw g)]
           (recur lg)
-          (approximate-last))))))
+          (approximate-last)))))) 
 
 (comment (-main) 
          (def ^:private ^:const bad-cases [{:C (->Control 60 4)
@@ -171,13 +171,14 @@
          (map :x-goal (hover-stages i-lander l-pad l-shell r-shell (list)))
          (identity stages)
          (map (juxt :stage :x-goal) stages)
-         (intersect-time  [0.1 10 0] [-0.3 0 0] [0 -21 14 -1]))
+         (intersect-time  [0.1 10 0] [-0.3 0 0] [0 -21 14 -1])
+         (do (r/sketch-up) (main/-main)))
 
 (defn bad-test []
   (let [bad-l
         #lander.Lander{:x 1751.0, :y 2522.0, :vx 108.0, :vy -21.0, :fuel 774,
                        :control #lander.Control{:angle -5, :power 3}}
-        scape (detect-landscape (:surface (test-data 0)))
+        scape (build-landscape (:surface (test-data 0)))
         stages (detect-stages bad-l scape)
         guide (make-guide bad-l scape)]
     (map :stage stages)
@@ -186,6 +187,6 @@
 (defn bad-test-2 []
   (let [T (test-data 2)
         L (form-lander (:lander T))
-        S (detect-landscape (:surface T))
+        S (build-landscape (:surface T))
         stages (detect-stages L S)]
     L))

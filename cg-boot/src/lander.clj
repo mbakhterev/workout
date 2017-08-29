@@ -1,5 +1,4 @@
-(ns lander (:require [geometry :refer :all]
-                     [roots :refer :all]))
+(ns lander (:require [geometry :refer :all]))
 
 (set! *warn-on-reflection* true)
 
@@ -30,14 +29,7 @@
   (let [[m c] (split-at 5 nums)]
     (apply ->Lander (conj (vec m) (apply ->Control c))))) 
 
-(defrecord Stage [stage
-                  ^boolean left?
-                  ^geometry.Section section 
-                  ^geometry.Section pad
-                  ^double x-goal
-                  ^double x-pad
-                  ^double y-pad
-                  surface])
+
 
 (defrecord Constraint [^double x ^double h ^double t])
 
