@@ -1,3 +1,4 @@
+
 (ns geometry)
 
 (set! *warn-on-reflection* true)
@@ -17,31 +18,36 @@
                              ^double k
                              ^double mx]))
 
+; Участок поверхности -- линия, проходящая через точки с заранее рассчитанной
+; нормалью
+
 (defrecord Section [^double ax ^double ay
                     ^double bx ^double by
                     ^double nx ^double ny])
 
-(defrecord Landscape [^geometry.Section landing-pad
+; Местность для полёта. Списки сегментов l-rock и l-rock -- это приподнятые
+; сегменты поверхности, чтобы не приходилось многократно пересчитывать этот
+; подъём в самых неподходящих местах кода
+
+(defrecord Landscape [^Section landing-pad
                       left-rock
                       right-rock
+                      l-rock
+                      r-rock
                       raw-surface])
 
-; Структура Stage для описания текущей стадии полёта. Содержит данные,
-; необходимые для рассчётов. Границы ax и bx отрезка поверхности, проще
-; проверить ax ≤ (:x lander) < bx, чем с учётом направления left? проверять
-; пересечение с целью. Целевую линию x = tx необходимо пересечь. Дальняя граница
-; посадочной площадки px и её высота py. Нормаль nx, ny и точка tx, ty задают
-; линию, под которую нельзя залетать. Список surface -- набор дополнительных
-; ограничительных отрезков для стадии reverse
+; Структура Stage описывает стадию полёта над сегментом поверхности section к
+; цели tx. Значения py и px задают высоту и дальний край посадочной площадки.
+; Список сегментов surface - нужен для контроля пересечения при развороте на
+; стадии reverse. Направление к цели задаётся direction так, чтобы 
+; (<= 0.0 (* direction (- tx (:x lander))))
 
-(defrecord Stage [stage
-                  surface
-                  ^double ax ^double bx
-                  ^double tx ^double ty
-                  ^double nx ^double ny
+(defrecord Stage [^Section section 
+                  ^double tx
                   ^double px ^double py
-                  ^double direction
-                  ^boolean left?])
+                  ^double direction 
+                  stage
+                  surface])
 
 (comment (defrecord Stage [stage
                            ^boolean left?
@@ -88,11 +94,11 @@
                                          (:x b) (:y b)
                                          nx ny)))
 
-(defn over-line? [^double x ^double y ^double nx ^double ny ^double tx ^double ty]
+(defn over-line? [^Section {x :ax y: ay nx :nx ny :ny} ^double tx ^double ty]
   (< 0 (+ (* nx (- tx x))
           (* ny (- ty y)))))
 
-(defn in-range? [^double ax ^double bx ^double x] (and (<= ax x) (< x bx)))
+(defn in-range? [^Section {ax :ax bx :bx} ^double x] (and (<= ax x) (< x bx)))
 
 (defn- surface-points [raw-numbers]
   (map (fn [p] (apply ->Point p)) (partition 2 raw-numbers)))
@@ -104,22 +110,22 @@
   (defn- find-landing-pad [points]
     (apply make-section (first (filter is-pad (partition 2 1 points))))))
 
-(let [monotonize (fn [points]
-                   (loop [[^Point p & P] (rest points)
-                          max-y (:y (first points))
-                          R [(first points)]]
-                     (cond
-                       ; Обработка последней точки. Если она выше чем предыдущий
-                       ; максимальный уровень, то включаем её в список. Если нет, то
-                       ; накрываем поверхность горизонтальным сегментом на
-                       ; максимальном уровне
-                       (empty? P) (conj R (if (> (:y p) max-y) p (->Point (:x p) max-y)))
+(letfn [(monotonize [points]
+          (loop [[^Point p & P] (rest points)
+                 max-y (:y (first points))
+                 R [(first points)]]
+            (cond
+              ; Обработка последней точки. Если она выше чем предыдущий
+              ; максимальный уровень, то включаем её в список. Если нет, то
+              ; накрываем поверхность горизонтальным сегментом на
+              ; максимальном уровне
+              (empty? P) (conj R (if (> (:y p) max-y) p (->Point (:x p) max-y)))
 
-                       ; Обновление максимума с добавлением точки в результат
-                       (> (:y p) max-y) (recur P (:y p) (conj R p))
+              ; Обновление максимума с добавлением точки в результат
+              (> (:y p) max-y) (recur P (:y p) (conj R p))
 
-                       ; Пропускаем точку
-                       :else (recur P max-y R))))]
+              ; Пропускаем точку
+              :else (recur P max-y R))))]
   (defn- surface-shell [points landing]
     (let [l-points (filter (fn [^Point p] (<= (:x p) (:ax landing))) points)
           r-points (filter (fn [^Point p] (>= (:x p) (:bx landing))) points)
@@ -127,11 +133,17 @@
           r-shell (monotonize r-points)]
       [(vec (surface-sections l-shell)) (vec (surface-sections r-shell))])))
 
-(defn build-landscape [surface-data]
-  (let [points (surface-points surface-data)
-        pad (find-landing-pad points)
-        [l-rock r-rock] (surface-shell points pad)]
-    (->Landscape pad l-rock r-rock (surface-sections points))))
+(let [uplift-delta 32.0
+      uplift (fn [^Section s] (->Section (:ax s) (+ uplift-delta (:ay s))
+                                         (:bx s) (+ uplift-delta (:by s))
+                                         (:nx s) (:ny s)))]
+  (defn build-landscape [surface-data]
+    (let [points (surface-points surface-data)
+          pad (find-landing-pad points)
+          [l-rock r-rock] (surface-shell points pad)]
+      (->Landscape pad l-rock r-rock
+                   (map uplift l-rock) (map uplift r-rock)
+                   (surface-sections points)))))
 
 (defn solve-square-equation [^double a ^double b ^double c]
   (if (zero? a)
@@ -178,7 +190,7 @@
 ; Рассчёт времени пересечения траектории с ускорением (ax ay) начальной скоростью (vx vy) и
 ; положением (x y) и прямой проходящей через (x0 y0) с нормалью (nx ny).
 
-(defn intersect-time [^Line {x0 :x y0 :y nx :nx ny :ny}
+(defn intersect-time [^Section {x0 :ax y0 :ay nx :nx ny :ny}
                       [^double ax ^double vx ^double x]
                       [^double ay ^double vy ^double y]]
   (let [a (* 0.5 (+ (* nx ax) (* ny ay)))
@@ -194,10 +206,10 @@
          reverse-stage)
 
 (defn detect-stages [^double x ^double vx
-                     ^Landscape {l-rock :left-rock r-rock :right-rock pad :landing-pad}]
+                     ^Landscape {l-rock :l-rock r-rock :r-rock pad :landing-pad}]
   (->> (descend-stage x vx pad)
        (brake-stage x vx pad)
-       (hover-stages x vx pad l-rock r-rock)
+       (hover-stages x pad l-rock r-rock)
        (reverse-stage x vx pad l-rock r-rock)))
 
 (comment (defn- brake-stage [^Lander {x :x vx :vx :as lander}
@@ -212,39 +224,74 @@
 (defn- brake-stage [^double x ^double vx
                     ^Section {ax :ax py :ay bx :bx nx :nx ny :ny :as pad}
                     stages]
-  (if (and (= 0.0 vx) (in-range? ax bx x))
+  (if (and (= 0.0 vx) (in-range? pad x))
     stages
-    (let [left? (or (< x ax) (< 0.0 vx))
-          dir (if left? 1.0 -1.0) 
-          px (if left? bx ax)]
-      (cons (->Stage :brake nil ax bx px py nx ny px py dir left?) stages))))
+    (let [dir (if (or (< x ax) (< 0.0 vx)) 1.0 -1.0)
+          px  (if (pos? dir) bx ax)]
+      (cons (->Stage pad px px py dir :brake nil) stages))))
 
-(defn- hover-stages [^Lander {x :x :as l}
-                     ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
-                     l-rock r-rock stages]
-  (letfn [(on-left [^Stage s]
-            (if (< x (:bx s) bx)
-              (map (fn [^double t] (->Stage :hover true s pad t bx ay nil))
-                   (divide-stage (max x (:ax s)) (:bx s)))))
-          (on-right [^Stage s]
-            (if (> x (:ax s) ax)
-              (map (fn  [^double t] (->Stage :hover false s pad t ax ay nil))
-                   (divide-stage  (min x (:bx s)) (:ax s)))))
+(comment (defn- hover-stages [^double x
+                              ^Section {ax :ax ay :ay bx :bx :as pad}
+                              l-rock r-rock
+                              stages]
+           (letfn [(on-left [^Section s]
+                     (if (< x (:bx s) bx)
+                       (map (fn [^double t] (->Stage :hover true s pad t bx ay nil))
+                            (divide-stage (max x (:ax s)) (:bx s)))))
+                   (on-right [^Section s]
+                     (if (> x (:ax s) ax)
+                       (map (fn  [^double t] (->Stage :hover false s pad t ax ay nil))
+                            (divide-stage  (min x (:bx s)) (:ax s)))))
+                   (divide-stage [^double a ^double t]
+                     (if (< (Math/abs (- t a)) 2048.0)
+                       (list t)
+                       (let [m (+ a (/ (- t a) 2.0))] (concat (divide-stage a m) (divide-stage m t)))))]
+             (concat (cond (< x ax) (mapcat on-left l-rock)
+                           (> x bx) (mapcat on-right (reverse r-rock)))
+               stages))))
+
+(defn- hover-stages [^double x
+                     ^Section {ax-pad :ax y-pad :ay bx-pad :bx :as pad}
+                     l-rock r-rock
+                     stages]
+  (letfn [(on-left [^Section s]
+            (if (< x (:bx s) bx-pad)
+              (map (fn [^double t] (->Stage s t bx-pad y-pad 1.0 :hover nil))
+                   (divide-stage (max (:ax s) x) (:bx s)))))
+          (on-right [^Section s]
+            (if (> x (:ax s) ax-pad)
+              (map (fn [^double t] (->Stage s t ax-pad y-pad -1.0 :hover nil))
+                   (divide-stage (:ax s) (min x (:bx s))))))
           (divide-stage [^double a ^double t]
-            (if (< (Math/abs (- t a)) 2048.0)
+            (if (< (- t a) 2048.0)
               (list t)
               (let [m (+ a (/ (- t a) 2.0))] (concat (divide-stage a m) (divide-stage m t)))))]
-    (concat (cond (< x ax) (mapcat on-left l-rock)
-                  (> x bx) (mapcat on-right (reverse r-rock)))
+    (concat (cond (< x ax-pad) (mapcat on-left l-rock)
+                  (> x bx-pad) (mapcat on-right (reverse r-rock)))
       stages)))
 
-(defn- reverse-stage [^Lander {x :x vx :vx :as lander}
-                      ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+(comment (defn- reverse-stage [^Lander {x :x vx :vx :as lander}
+                               ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
+                               l-rock r-rock stages]
+           (if-not (or (and (< x ax) (< vx 0.0))
+                       (and (> x bx) (> vx 0.0)))
+             stages
+             (let [left? (< x ax)
+                   rock (if left? l-rock r-rock)
+                   s (first (filter (partial in-range? lander) rock))
+                   surface (if left?
+                             (take-while (fn [r] (<= (:ax r) x)) rock)
+                             (drop-while (fn [r] (<= (:bx r) x)) rock))]
+               (cons (->Stage :reverse left? s pad (if left? (:bx s) (:ax s)) (if left? bx ax) ay surface)
+                     stages)))))
+
+(defn- reverse-stage [^double x ^double vx
+                      ^Section {ax :ax ay :ay bx :bx :as pad}
                       l-rock r-rock stages]
   (if-not (or (and (< x ax) (< vx 0.0))
               (and (> x bx) (> vx 0.0)))
     stages
-    (let [left? (< x ax)
+    (let [dir (if (< x ax) 1.0 -1.0)
           rock (if left? l-rock r-rock)
           s (first (filter (partial in-range? lander) rock))
           surface (if left?
@@ -258,6 +305,3 @@
   (let [left? (< x ax)
         xp (if left? bx ax)]
     (list (->Stage :descend left? pad pad xp xp ay nil))))
-
-
-

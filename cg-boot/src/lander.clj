@@ -1,4 +1,4 @@
-(ns lander (:require [geometry :refer :all]))
+(ns lander (:require [geometry :as g]))
 
 (set! *warn-on-reflection* true)
 
@@ -29,8 +29,6 @@
   (let [[m c] (split-at 5 nums)]
     (apply ->Lander (conj (vec m) (apply ->Control c))))) 
 
-
-
 (defrecord Constraint [^double x ^double h ^double t])
 
 ; (defrecord Roots [^double left ^double right])
@@ -56,7 +54,7 @@
       sin (fn [a] (Math/sin (Math/toRadians (+ 90 a))))
       x-force (fn ^double [a p] (* p (cos a)))
       y-force (fn ^double [a p] (- (* p (sin a)) M))
-      to-zero (fn [^double a] (if (> 1E-10 (Math/abs a)) 0.0 a))
+      to-zero (fn [^double a] (if (non-zero? a) a 0.0))
 
       make-table (fn [f] (vec (for [p (range 0 5)]
                                 (vec (for [a (range -90 91)]
