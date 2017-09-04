@@ -65,24 +65,41 @@
   (defn- x-acceleration [^long a ^long p] ((x-table p) (+ 90 a)))
   (defn- y-acceleration [^long a ^long p] ((y-table p) (+ 90 a))))
 
-; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
-; модуля и то управление, которое привело его в это положение. Положение -
-; вектор в фазовом пространстве (vec x y dx dy fuel)
- 
-(defn move [^Control ctl
-            ^double t
-            ^Lander {lc :control :as l}] 
-  (let [{angle :angle power :power :as nc} (control-to lc ctl)
-        ax (x-acceleration angle power)
-        ay (y-acceleration angle power)
-        {x :x y :y vx :vx vy :vy fuel :fuel} l]
-    (assert (or (= 1.0 t) (= nc ctl)))
+(defn- just-move [^Control {a :angle p :power :as ctl}
+                  ^double t
+                  ^Lander {x :x y :y vx :vx vy :vy fuel :fuel}]
+  (let [ax (x-acceleration a p)
+        ay (y-acceleration a p)]
     (->Lander (+ x (* vx t) (* 0.5 ax t t))
               (+ y (* vy t) (* 0.5 ay t t))
               (+ vx (* ax t))
               (+ vy (* ay t))
-              (- fuel (* power t))
-              nc)))
+              (- fuel (* p t))
+              ctl)))
+
+; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
+; модуля и то управление, которое привело его в это положение. Положение -
+; вектор в фазовом пространстве (vec x y dx dy fuel)
+ 
+(comment (defn move [^Control ctl
+                     ^double t
+                     ^Lander {lc :control :as l}] 
+           (let [{angle :angle power :power :as nc} (control-to lc ctl)
+                 ax (x-acceleration angle power)
+                 ay (y-acceleration angle power)
+                 {x :x y :y vx :vx vy :vy fuel :fuel} l]
+             (assert (or (= 1.0 t) (= nc ctl)))
+             (->Lander (+ x (* vx t) (* 0.5 ax t t))
+                       (+ y (* vy t) (* 0.5 ay t t))
+                       (+ vx (* ax t))
+                       (+ vy (* ay t))
+                       (- fuel (* power t))
+                       nc))))
+
+(defn move [^Control ctl ^double t ^Lander {lc :control :as l}]
+  (let [nc (control lc ctl)]
+    (assert (or (= 1.0 t) (= nc ctl)))
+    (just-move ctl t l)))
 
 ; Проверки того, что модуль над поверхностью Марса
 
@@ -227,15 +244,17 @@
 
 (declare hover-guide
          brake-guide
-         descend-guide)
+         descend-guide
+         reverse-guide)
 
 (defn search-guide [stages ^Lander lander]
   (if-let [s (first stages)]
     (case (:stage s)
-      :brake (do (debugln :search-guide "brake") (brake-guide s (rest stages) lander))
-      :hover (do (debugln :search-guide "hover")(hover-guide s (rest stages) lander))
+      :reverse (do (debugln :search-guide "reverse") (reverse-guide s (rest stages) lander))  
+      :brake   (do (debugln :search-guide "brake") (brake-guide s (rest stages) lander))
+      :hover   (do (debugln :search-guide "hover")(hover-guide s (rest stages) lander))
       :descend (do (debugln :search-guide "brake") (descend-guide s lander))
-      (list))))
+      :else    (assert false))))
 
 ; (defn- near-zero? [^double a] (> 1E-10 (Math/abs a)))
 
@@ -284,18 +303,34 @@
 (defn- solve-hover [^Lander {x :x vx :vx {a :angle p :power :as ctl} :control :as l}
                     ^Stage {x-target :x-target}]
   (let [ax (x-acceleration a p)
-        r  (g/time-to-intersect-x ax vx x x-target)]
+        r  (g/time-to-intersect-1d ax vx x x-target)]
     (if-not (Double/isNaN r) 
       (let [tm (Math/ceil r)]
         (->Move :ok (move ctl tm l) tm)))))
 
-(defn- hover-align-control [^Stage {section :section :as stage} ^Lander lander ^Control ctl]
-  (loop [l lander t 0.0]
-    (cond (not (on-radar? l))          (->Move :ko l 0.0)
-          (not (over-line? l section)) (->Move :ko l 0.0)
-          (not (in-range? l section))  (if (constraint l stage) (->Move :out l t)  (->Move :ko l 0.0))
-          (= ctl (:control l))         (->Move :ok l t)
-          :else                        (recur (move ctl 1.0 l) (+ 1.0 t)))))
+(comment (defn- hover-align-control [^Stage {section :section :as stage} ^Lander lander ^Control ctl]
+           (loop [l lander t 0.0]
+             (cond (not (on-radar? l))          (->Move :ko l 0.0)
+                   (not (over-line? l section)) (->Move :ko l 0.0)
+                   (not (in-range? l section))  (if (constraint l stage) (->Move :out l t)  (->Move :ko l 0.0))
+                   (= ctl (:control l))         (->Move :ok l t)
+                   :else                        (recur (move ctl 1.0 l) (+ 1.0 t))))))
+
+(defn- hover-align-control [^Stage {section :section :as stage}
+                            ^Lander {y :y :as lander}
+                            ^Control ctl]
+  (if (and (<= y y-max)
+           (over-section? l section))
+    (loop [{x :x y :y vx :vx vy :vy lc :control :as l} lander t 0.0]
+      (let [{a :angle p :power :as nc} (control-to lc ctl)
+            ax (x-acceleration a p)
+            ay (y-acceleration a p)]
+        (if (and (< 1.0 (g/time-to-intersect-1d ay vy y (- y-max 10)))
+                 (< 1.0 (g/time-to-intersect-2d [ax vx x] [ay vy v] section))
+                 )))
+      )
+    )
+  )
 
 (defn- hover-integrate-ok-one [^Stage {section :section :as stage}
                                ^Lander {y :y vy :vy {a :angle p :power} :control :as lander}]
@@ -422,12 +457,14 @@
                    (< (:ay dc) (+ (:y l) (:h dc))))
             (-> Move :ok l tc))))))) 
 
-(defn descend-guide [^geometry.Stage stage ^Lander lander]
+(defn- descend-guide [^geometry.Stage stage ^Lander lander]
   (loop [l lander R (list)]
     (if-let [m (solve-descend-one l stage)]
       (case (:state m)
         :done R
         :ok (recur (:lander m) (cons m R))))))
+
+(defn- reverse-guide [^geometry.Stage stage ^Lander lander] (list))
 
 (defn model-control [guide ^Lander lander]
   (letfn [(do-control [moves ^Lander l]

@@ -190,9 +190,9 @@
 ; Рассчёт времени пересечения траектории с ускорением (ax ay) начальной скоростью (vx vy) и
 ; положением (x y) и прямой проходящей через (x0 y0) с нормалью (nx ny).
 
-(defn intersect-time ^double [[^double ax ^double vx ^double x]
-                              [^double ay ^double vy ^double y]
-                              ^Section {x0 :ax y0 :ay nx :nx ny :ny}]
+(defn time-to-intersect-2d ^double [[^double ax ^double vx ^double x]
+                                    [^double ay ^double vy ^double y]
+                                    ^Section {x0 :ax y0 :ay nx :nx ny :ny}]
   (let [a (* 0.5 (+ (* nx ax) (* ny ay)))
         b (+ (* nx vx) (* ny vy))
         c (+ (* nx (- x x0)) (* ny (- y y0)))]
@@ -200,7 +200,7 @@
 
 ; Время пересечения линии x = tx
 
-(defn time-to-intersect-x ^double [^double ax ^double vx ^double x ^double tx]
+(defn time-to-intersect-1d ^double [^double ax ^double vx ^double x ^double tx]
   (positive-root-of-square-equation (* 0.5 ax) vx (- x tx)))
 
 ; Построение стадий полёта.
