@@ -159,7 +159,10 @@
 
 ; Мы решаем уравнение (poly 2 a b c) относительно времени.
 ; Из опыта решения Lander-2 можно сделать вывод, что нас всегда
-; интересует один корень - время в ближайшем будущем. Его и вычисляем. 
+; интересует один корень - время в ближайшем будущем. Его и вычисляем. Если
+; решения нет, возвращается +бесконечность, потому что основной анализ на
+; пересечения в том, что они будут позже определённого времени. С бесконечностью
+; нужно проверять меньше условий.
 
 (defn positive-root-of-square-equation ^double [^double a ^double b ^double c]
   (or (if (zero? a)
@@ -175,7 +178,7 @@
                   t-max  (max tp tm)
                   t-min  (min tp tm)]
               (if (<= 0.0 t-min) t-min (if (<= 0.0 t-max) t-max))))))
-      Double/NaN))
+      Double/POSITIVE_INFINITY))
 
 (defn square-extremum [^double a ^double b ^double c ^double t]
   (if (zero? a)

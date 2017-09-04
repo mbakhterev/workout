@@ -300,13 +300,7 @@
                (let [tm (Math/ceil r)]
                  (->Move :ok (move ctl tm l) tm))))))
 
-(defn- solve-hover [^Lander {x :x vx :vx {a :angle p :power :as ctl} :control :as l}
-                    ^Stage {x-target :x-target}]
-  (let [ax (x-acceleration a p)
-        r  (g/time-to-intersect-1d ax vx x x-target)]
-    (if-not (Double/isNaN r) 
-      (let [tm (Math/ceil r)]
-        (->Move :ok (move ctl tm l) tm)))))
+
 
 (comment (defn- hover-align-control [^Stage {section :section :as stage} ^Lander lander ^Control ctl]
            (loop [l lander t 0.0]
@@ -316,23 +310,41 @@
                    (= ctl (:control l))         (->Move :ok l t)
                    :else                        (recur (move ctl 1.0 l) (+ 1.0 t))))))
 
+; hover-align-control -- цикл выравнивания управления к заданному. Логика работы
+; такая: сначала проверка того, что модуль не разобьётся при очередном шаге
+; управления, а потом осуществление этого шага. Если всё хорошо, то модуль может
+; либо достигнуть нужного контроля, либо вылететь за отрезок в процессе. В
+; случае вылета за отрезок, стадию можно считать пройденной. Но тогда нужно
+; проверять результат на то, что он укладывается в ограничения constraint. В
+; случае неуспеха функция возвращает (move :ko l 0.0), это требуется для
+; функции генерации облака управлений для стадии hover.
+
 (defn- hover-align-control [^Stage {section :section :as stage}
                             ^Lander {y :y :as lander}
                             ^Control ctl]
   (if (and (<= y y-max)
            (over-section? l section))
-    (loop [{x :x y :y vx :vx vy :vy lc :control :as l} lander t 0.0]
-      (let [{a :angle p :power :as nc} (control-to lc ctl)
-            ax (x-acceleration a p)
-            ay (y-acceleration a p)]
-        (if (and (< 1.0 (g/time-to-intersect-1d ay vy y (- y-max 10)))
-                 (< 1.0 (g/time-to-intersect-2d [ax vx x] [ay vy v] section))
-                 )))
-      )
-    )
-  )
+    (loop [{lc :control :as l} lander t 0.0]
+      (cond (= ctl lc) (->Move :ok l t)
+            (in-range? l section) (if (constraint l stage) (->Move :out l t) (->Move :ko l 0.0))
+            :else (let [{x :x y :y vx :vx vy :vy} l
+                        {a :angle p :power :as nc} (control-to lc ctl)
+                        ax (x-acceleration a p)
+                        ay (y-acceleration a p)]
+                    (if (and (< 1.0 (g/time-to-intersect-1d ay vy y y-max))
+                             (< 1.0 (g/time-to-intersect-2d [ax vx x] [ay vy y] section)))
+                      (recur (just-move nc 1.0 l) (+ 1.0 t))
+                      (->Move :ko l 0.0))))))) 
 
-(defn- hover-integrate-ok-one [^Stage {section :section :as stage}
+(comment (defn- solve-hover [^Lander {x :x vx :vx {a :angle p :power :as ctl} :control :as l}
+                    ^Stage {x-target :x-target}]
+  (let [ax (x-acceleration a p)
+        r  (g/time-to-intersect-1d ax vx x x-target)]
+    (if (Double/isFinite r) 
+      (let [tm (Math/ceil r)]
+        (->Move :ok (move ctl tm l) tm))))))
+
+(comment (defn- hover-integrate-ok-one [^Stage {section :section :as stage}
                                ^Lander {y :y vy :vy {a :angle p :power} :control :as lander}]
   (if-let [m (solve-hover lander stage)]
     (let [{l :lander t :dt} m]
@@ -340,26 +352,58 @@
                (on-radar? l)
                (over-line? l section)
                (> (- y-max 10) (g/square-extremum (* 0.5 (y-acceleration a p)) vy y t)))
-        m))))
+        m)))))
 
-(defn- hover-integrate [^geometry.Stage stage
-                       ^Lander lander
-                       ^Control ctl]
-  (let [{state :state :as ma} (hover-align-control stage lander ctl)]
+; Логика точно такая же: сначала проверяем, можем ли достичь цели. Если можем,
+; то за какое время. И не пересечём ли за это время: землю, небо и другую
+; границу отрезка (такое теоретически может быть; возможно, это overkill).
+
+(defn- hover-steady-control [^Stage {section :section dir :direction tx :x-target :as stage}
+                             ^Lander {x :x y :y vx :vx vy :vy {a :angle p :power} :control :as lander}]
+  (let [ax (x-acceleration a p)
+        t  (Math/ceil (g/time-to-intersect-1d ax vx x tx))]
+    (if (Double/isFinite t)
+      (let [ay (y-acceleration a p)
+            xi (if (pos? dir) (:ax section) (:bx section))]
+        (if (and (< t (g/time-to-intersect-2d [ax vx x] [ay vy y] section))
+                 (< t (g/time-to-intersect-1d ay vy y y-max))
+                 (< t (g/time-to-intersect-1d ax vx x xi)))
+          (->Move :ok (just-move (:control lander) t lander)))))))
+
+(comment (defn- hover-integrate [^geometry.Stage stage
+                                 ^Lander lander
+                                 ^Control ctl]
+           (let [{state :state :as ma} (hover-align-control stage lander ctl)]
+             (case state
+               :ko nil
+               :ok (if-let [mi (hover-integrate-ok-one stage (:lander ma))] (list mi ma))
+               :out (list ma)))))
+
+(defn- hover-integrate [^Stage stage ^Lander lander ^Control control]
+  (let [{state :state :as ma} (hover-align-control stage lander control)]
     (case state
       :ko nil
-      :ok (if-let [mi (hover-integrate-ok-one stage (:lander ma))] (list mi ma))
+      :ok (if-let [mi (hover-steady-control stage (:lander ma))] (list mi ma))
       :out (list ma))))
 
 ; Облако возможных управлений на стадии hover
 
 (def ^:const ^:private angle-delta 15) 
 
-(defn- hover-control-cloud [^geometry.Stage stage ^Lander lander]
+(comment (defn- hover-control-cloud [^Stage stage ^Lander lander]
   (for [p (range 0 5)
         a (let [a-left (:angle (:control (:lander (hover-align-control stage lander (->Control -90 p)))))
                 a-right (:angle (:control (:lander (hover-align-control stage lander (->Control 90 p)))))]
             (if-not (:left? stage)
+              (range a-left (+ a-right 1) angle-delta)
+              (range a-right (- a-left 1) (- angle-delta))))]
+    (->Control a p))))
+
+(defn- hover-control-cloud [^Stage {dir :direction :as stage} ^Lander lander]
+  (for [p (range 0 5)
+        a (let [a-left (:angle (:control (:lander (hover-align-control stage lander (->Control -90 p)))))
+                a-right (:angle (:control (:lander (hover-align-control stage lander (->Control 90 p)))))]
+            (if-not (pos? direction)
               (range a-left (+ a-right 1) angle-delta)
               (range a-right (- a-left 1) (- angle-delta))))]
     (->Control a p)))
