@@ -54,7 +54,7 @@
       sin (fn [a] (Math/sin (Math/toRadians (+ 90 a))))
       x-force (fn ^double [a p] (* p (cos a)))
       y-force (fn ^double [a p] (- (* p (sin a)) M))
-      to-zero (fn [^double a] (if (g/non-zero? a) a 0.0))
+      to-zero (fn ^double [^double a] (if (g/non-zero? a) a 0.0))
 
       make-table (fn [f] (vec (for [p (range 0 5)]
                                 (vec (for [a (range -90 91)]
@@ -62,8 +62,12 @@
 
       x-table (make-table x-force)
       y-table (make-table y-force)]
-  (defn- x-acceleration [^long a ^long p] ((x-table p) (+ 90 a)))
-  (defn- y-acceleration [^long a ^long p] ((y-table p) (+ 90 a))))
+  (defn- x-acceleration
+    (^double [^Control {a :angle p :power}] (x-acceleration a p))
+    (^double [^long a ^long p] ((x-table p) (+ 90 a))))
+  (defn- y-acceleration
+    (^double [^Control {a :angle p :power}] (y-acceleration a p))
+    (^double [^long a ^long p] ((y-table p) (+ 90 a)))))
 
 (defn- just-move [^Control {a :angle p :power :as ctl}
                   ^double t
@@ -320,7 +324,7 @@
 (defn- hover-initial-ok? [^Lander {y :y :as lander} ^geometry.Stage {section :section}]
   (and (<= y g/y-max) (over-section? lander section)))
 
-(defn- hover-alive? [^Stage {section :section ox :x-opposite}
+(defn- hover-alive? [^geometry.Stage {section :section ox :x-opposite}
                      ^Lander {x :x y :y vx :vx vy :vy}
                      ^Control {a :angle p :power}
                      ^double dt]
@@ -381,12 +385,14 @@
 ; границу отрезка (такое теоретически может быть; возможно, это overkill).
 
 (defn- hover-steady-control ^Move [^Stage {section :section xt :x-target :as stage}
-                                   ^Lander {x :x y :y vx :vx vy :vy ctl :control :as lander}]
-  (let [ax (x-acceleration (:angle ctl) (:power ctl))
+                                   ^Lander {x :x y :y vx :vx vy :vy control :control :as lander}]
+  (let [ax (x-acceleration control)
         t  (Math/ceil (g/time-to-intersect-1d ax vx x xt))]
-    (if (Double/isFinite t)
-      (if (hover-alive? stage lander ctl t)
-        (->Move :ok (just-move (:control lander) t lander))))))
+    (if (and (Double/isFinite t)
+             (hover-alive? stage lander control t))
+      (let [l (just-move control t lander)] 
+        (if (constraint l stage)
+          (->Move :ok l t))))))
 
 (comment (defn- hover-integrate [^geometry.Stage stage
                                  ^Lander lander
@@ -433,14 +439,7 @@
           (cons m m-next)
           (recur (next cloud)))))))
 
-(defn- brake-align-control [^Lander lander ^geometry.Stage {pad :pad} ^Control ctl]
-  (loop [l lander t 0.0]
-    (cond (not (on-radar? l))         nil
-          (not (over-section? l pad)) nil
-          (= ctl (:control l))        (->Move :ok l t)
-          :else                       (recur (move ctl 1.0 l) (+ 1.0 t)))))
-
-; Торможение - это 4 стадии: (1) торможение с переходом к выбранному контролю;
+; Торможение - это 3 стадии: (1) торможение с переходом к выбранному контролю;
 ; (2) торможение с выбранным контролем; (3) торможение во время перехода к
 ; (контроль 0 4); Поэтому несколько движений. Решение на стадии (2) можно
 ; принимать лишь после моделирования стадии 3. Поэтому порядок таков. Кажется,
@@ -448,10 +447,40 @@
 ; рассчётов.  Вроде как, считать не долго, поэтому ограничения на высоту
 ; проверяем в самом конце.
 
+; Стадии 1 и 3 рассчитываются циклом выравнивания управления.
+
+(comment (defn- brake-align-control [^Lander lander ^geometry.Stage {pad :pad} ^Control ctl]
+           (loop [l lander t 0.0]
+             (cond (not (on-radar? l))         nil
+                   (not (over-section? l pad)) nil
+                   (= ctl (:control l))        (->Move :ok l t)
+                   :else                       (recur (move ctl 1.0 l) (+ 1.0 t))))))
+
+(defn- brake-initial-ok? [^Lander {y :y :as lander} ^geometry.Stage {section :section}]
+  (and (<= y g/y-max) (over-section? lander section)))
+
+(defn- brake-alive? [^geometry.Stage {xt :x-target xo :x-opposite}
+                     ^Lander {x :x y :y vx :vx vy :vy}
+                     ^Control {a :angle p :power}
+                     ^double dt]
+  (let [ax (x-acceleration a p)
+        ay (y-acceleration a p)]
+    (and (< dt (g/time-to-intersect-1d ax vx x xo))
+         (< dt (g/time-to-intersect-1d ax vx x xt))
+         (< dt (g/time-to-intersect-1d ay vy y g/y-max)))))
+
+(defn- brake-align-control ^Move [^Lander lander ^geometry.Stage stage ^Control control]
+  (loop [{lc :control :as l} lander t 0.0]
+    (if (= lc control)
+      (->Move :ok l t)
+      (let [nc (control-to lc control)]
+        (if (brake-alive? stage l nc 1.0)
+          (recur (just-move nc 1.0 l) (+ 1.0 t)))))))
+
 ; Решение для стадии (2) торможения. Тонкости. (2.1) считаем, что целевая vx
 ; равна 0. (2.2) считаем, что должны хотя бы 0 секунд тормозить. Иначе, нам дали
 ; плохой контроль, и можно было бы потратить меньше топлива на остановку.
-
+ 
 (defn- solve-brake-2 [^Lander {vx :vx {angle :angle power :power :as ctl} :control :as lander}
                       ^geomtrey.Stage {pad :pad :as stage}]
   (let [ax (x-acceleration angle power)]
