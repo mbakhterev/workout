@@ -1,7 +1,9 @@
-
 (ns geometry)
 
 (set! *warn-on-reflection* true)
+
+(def ^:const x-max (- 7000.0 1.0))
+(def ^:const y-max (- 3000.0 1.0))
 
 ; Структуры данных. Интуитивно могут быть полезны и повысить какую-нибудь
 ; эффективность
@@ -37,13 +39,14 @@
                       raw-surface])
 
 ; Структура Stage описывает стадию полёта над сегментом поверхности section к
-; цели tx. Значения py и px задают высоту и дальний край посадочной площадки.
+; цели x-target. Противоположный от цели конец сегмента x-opposite. Значения y-pad
+; и x-pad задают высоту и дальний край посадочной площадки.
 ; Список сегментов surface - нужен для контроля пересечения при развороте на
 ; стадии reverse. Направление к цели задаётся direction так, чтобы 
-; (<= 0.0 (* direction (- tx (:x lander))))
+; (<= 0.0 (* direction (- x-target (:x lander))))
 
 (defrecord Stage [^Section section 
-                  ^double x-target
+                  ^double x-target ^double x-opposite
                   ^double x-pad ^double y-pad
                   ^long direction 
                   stage
@@ -242,11 +245,12 @@
                (cons (->Stage :brake left? pad pad xp xp ay nil) stages)))))
 
 (defn- brake-stage [^double x ^double vx
-                    ^Section {ax :ax py :ay bx :bx nx :nx ny :ny :as pad}]
+                    ^Section {ax :ax py :ay bx :bx :as pad}]
   (if-not (and (zero? vx) (in-range? pad x))
     (let [dir (if (or (< x ax) (< 0.0 vx)) 1 -1)
-          px  (if (pos? dir) bx ax)]
-      (list (->Stage pad px px py dir :brake nil)))))
+          px  (if (pos? dir) bx ax)
+          ox  (if (pos? dir) ax bx)]
+      (list (->Stage pad px ox px py dir :brake nil)))))
 
 (comment (defn- hover-stages [^double x
                               ^Section {ax :ax ay :ay bx :bx :as pad}
@@ -273,16 +277,14 @@
                      rock]
   (letfn [(on-left [^Section s]
             (if (< x (:bx s) bx-pad)
-              (map (fn [^double t] (->Stage s t bx-pad y-pad 1 :hover nil))
+              (map (fn [^double o ^double t] (->Stage s t o bx-pad y-pad 1 :hover nil))
                    (divide-stage (max (:ax s) x) (:bx s)))))
           (on-right [^Section s]
             (if (> x (:ax s) ax-pad)
-              (map (fn [^double t] (->Stage s t ax-pad y-pad -1 :hover nil))
-                   (divide-stage (:ax s) (min x (:bx s))))))
-          (divide-stage [^double a ^double t]
-            (if (< (- t a) 2048.0)
-              (list t)
-              (let [m (+ a (/ (- t a) 2.0))] (concat (divide-stage a m) (divide-stage m t)))))]
+              (map (fn [^double o ^double t] (->Stage s t o ax-pad y-pad -1 :hover nil))
+                   (divide-stage (min x (:bx s)) (:ax s)))))
+          (divide-stage [^double a ^double b]
+            (partition 2 1 (concat (range a b (* (compare b a) 2048.0)) (list b))))]
     (cond (< x ax-pad) (mapcat on-left rock)
           (> x bx-pad) (mapcat on-right (reverse rock)))))
 
@@ -311,10 +313,15 @@
           surface (if (pos? dir)
                     (take-while (fn [^Section r] (<= (:ax r) x)) rock)
                     (drop-while (fn [^Section r] (<= (:bx r) x)) rock))]
-      (list (->Stage s (if (pos? dir) (:bx s) (:ax s)) (if (pos? dir) bx-pad ax-pad) y-pad dir :reverse surface)))))
+      (list (->Stage s (if (pos? dir) (:bx s) (:ax s)) (if (pos? dir) 0.0 x-max)
+                     (if (pos? dir) bx-pad ax-pad) y-pad
+                     dir
+                     :reverse
+                     surface)))))
 
 (defn- descend-stage [^double x
                       ^Section {ax-pad :ax y-pad :ay bx-pad :bx :as pad}]
   (let [dir (if (< x ax-pad) 1 -1)
-        tx-pad (if (pos? dir) bx-pad ax-pad)]
-    (list (->Stage pad tx-pad tx-pad y-pad dir :descend nil))))
+        tx-pad (if (pos? dir) bx-pad ax-pad)
+        ox-pad (if (pos? dir) ax-pad bx-pad)]
+    (list (->Stage pad tx-pad ox-pad tx-pad y-pad dir :descend nil))))
