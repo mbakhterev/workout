@@ -333,17 +333,20 @@
 ; сам модуль во время такого движения может оказаться не с той стороны от линии.
 ; Проверяем это
 
-(defn- hover-alive? [^geometry.Stage {section :section ox :x-opposite}
+(defn- hover-alive? [^geometry.Stage {section :section dir :direction ox :x-opposite}
                      ^Lander {x :x y :y vx :vx vy :vy}
                      ^Control {a :angle p :power}
                      ^double dt]
   (let [ax (x-acceleration a p)
-        ay (y-acceleration a p)]
+        ay (y-acceleration a p)
+        x-next (g/poly-2 ax vx x dt)
+        y-next (g/poly-2 ay vy y dt)]
     (and (< dt (g/time-to-intersect-2d p [ax vx x] [ay vy y] section))
-         (or (not (g/non-zero? (g/normal-pro))))
+         (or (not (g/non-zero? (g/normal-projection section x-next y-next))))
          (< dt (g/time-to-intersect-1d ay vy y g/y-max))
-         (or (not (g/non-zero? (- y y-max))) (<= (poly-2 ay vy y dt) y-max))
-         (or (not (g/non-zero? (- x ox))) (< dt (g/time-to-intersect-1d ax vx x ox))))))
+         (or (not (g/non-zero? (- y g/y-max))) (<= y-next g/y-max))
+         (< dt (g/time-to-intersect-1d ax vx x ox))
+         (or (not (g/non-zero? (- x ox))) (pos? (* dir (- x-next ox)))))))
 
 (comment (defn- hover-align-control ^Move [^geometry.Stage {section :section :as stage}
                                            ^Lander {y :y :as lander}

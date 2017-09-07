@@ -97,13 +97,13 @@
                                          (:x b) (:y b)
                                          nx ny)))
 (defn normal-projection ^double [^Section {x :ax y :ay nx :nx ny :ny} ^double tx ^double ty]
-  (+ (* nx (- tx x)) (* ny (-t ty y))))
+  (+ (* nx (- tx x)) (* ny (- ty y))))
 
 (comment (defn over-line? [^Section {x :ax y :ay nx :nx ny :ny} ^double tx ^double ty]
            (< 0 (+ (* nx (- tx x))
                    (* ny (- ty y))))))
 
-(defn over-line? (comp pos? normal-projection))
+(def over-line? (comp pos? normal-projection))
 
 (defn in-range? [^double x ^Section {ax :ax bx :bx}] (and (<= ax x) (< x bx)))
 
