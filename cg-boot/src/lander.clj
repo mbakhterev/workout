@@ -69,13 +69,13 @@
     (^double [^Control {a :angle p :power}] (y-acceleration a p))
     (^double [^long a ^long p] ((y-table p) (+ 90 a)))))
 
-(defn- just-move [^Control {a :angle p :power :as ctl}
-                  ^double t
-                  ^Lander {x :x y :y vx :vx vy :vy fuel :fuel}]
+(defn- just-move ^Lander [^Control {a :angle p :power :as ctl}
+                          ^double t
+                          ^Lander {x :x y :y vx :vx vy :vy fuel :fuel}]
   (let [ax (x-acceleration a p)
         ay (y-acceleration a p)]
-    (->Lander (+ x (* vx t) (* 0.5 ax t t))
-              (+ y (* vy t) (* 0.5 ay t t))
+    (->Lander (g/poly-2 (* 0.5 ax) vx x t) ; (+ x (* vx t) (* 0.5 ax t t))
+              (g/poly-2 (* 0.5 ay) vy y t) ; (+ y (* vy t) (* 0.5 ay t t))
               (+ vx (* ax t))
               (+ vy (* ay t))
               (- fuel (* p t))
@@ -100,7 +100,7 @@
                        (- fuel (* power t))
                        nc))))
 
-(defn move [^Control ctl ^double t ^Lander {lc :control :as l}]
+(defn move ^Lander [^Control ctl ^double t ^Lander {lc :control :as l}]
   (let [nc (control-to lc ctl)]
     (assert (or (= 1.0 t) (= nc ctl)))
     (just-move ctl t l)))
@@ -324,6 +324,15 @@
 (defn- hover-initial-ok? [^Lander {y :y :as lander} ^geometry.Stage {section :section}]
   (and (<= y g/y-max) (over-section? lander section)))
 
+; Проверка на допустимость движения под заданным управлением. Критерий: модуль
+; не должен пересечь ни одну из ограничивающих стадию линий. Тонкость в том, что
+; модуль может быть на этой линии. Тогда time-to-intersect (которая сводится к
+; positive-root-of-square-equation, которая возвращает только строго
+; положительные корни) пройдёт тест на пересечение (positive-root вернёт +Infinity или
+; следующее пересечение с линией в достаточно отдалённом будущем), но при этом,
+; сам модуль во время такого движения может оказаться не с той стороны от линии.
+; Проверяем это
+
 (defn- hover-alive? [^geometry.Stage {section :section ox :x-opposite}
                      ^Lander {x :x y :y vx :vx vy :vy}
                      ^Control {a :angle p :power}
@@ -331,7 +340,9 @@
   (let [ax (x-acceleration a p)
         ay (y-acceleration a p)]
     (and (< dt (g/time-to-intersect-2d p [ax vx x] [ay vy y] section))
+         (or (not (g/non-zero? (g/normal-pro))))
          (< dt (g/time-to-intersect-1d ay vy y g/y-max))
+         (or (not (g/non-zero? (- y y-max))) (<= (poly-2 ay vy y dt) y-max))
          (or (not (g/non-zero? (- x ox))) (< dt (g/time-to-intersect-1d ax vx x ox))))))
 
 (comment (defn- hover-align-control ^Move [^geometry.Stage {section :section :as stage}

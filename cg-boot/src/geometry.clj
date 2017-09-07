@@ -96,10 +96,14 @@
   (let [[nx ny] (normal a b)] (->Section (:x a) (:y a)
                                          (:x b) (:y b)
                                          nx ny)))
+(defn normal-projection ^double [^Section {x :ax y :ay nx :nx ny :ny} ^double tx ^double ty]
+  (+ (* nx (- tx x)) (* ny (-t ty y))))
 
-(defn over-line? [^Section {x :ax y :ay nx :nx ny :ny} ^double tx ^double ty]
-  (< 0 (+ (* nx (- tx x))
-          (* ny (- ty y)))))
+(comment (defn over-line? [^Section {x :ax y :ay nx :nx ny :ny} ^double tx ^double ty]
+           (< 0 (+ (* nx (- tx x))
+                   (* ny (- ty y))))))
+
+(defn over-line? (comp pos? normal-projection))
 
 (defn in-range? [^double x ^Section {ax :ax bx :bx}] (and (<= ax x) (< x bx)))
 
@@ -148,7 +152,7 @@
                    (map uplift l-rock) (map uplift r-rock)
                    (surface-sections points)))))
 
-(defn solve-square-equation [^double a ^double b ^double c]
+(defn solve-square-equation ^Roots [^double a ^double b ^double c]
   (if (zero? a)
     (if (not (zero? b))
       (let [t (/ (- c) b)] (->Roots t t)))
@@ -159,6 +163,9 @@
               tp     (* (+ (- b) D-sqrt) a-rcpr)
               tm     (* (- (- b) D-sqrt) a-rcpr)]
           (->Roots (min tp tm) (max tp tm)))))))
+
+(defn poly-2 ^double [^double a ^double b ^double c ^double x]
+  (+ c (* x (+ b (* x a)))))
 
 ; Мы решаем уравнение (poly 2 a b c) относительно времени.
 ; Из опыта решения Lander-2 можно сделать вывод, что нас всегда
