@@ -61,7 +61,9 @@
                            ^double y-pad
                            surface]))
 
-(defn non-zero? [^double x] (< 1E-10 (Math/abs x)))
+(let [ε 1E-10]
+  (defn non-zero? [^double x] (< ε (Math/abs x)))
+  (defn near-zero? [^double x] (<= (Math/abs x) ε)))
 
 (defn- normal [^Point a ^Point b]
   (let [dx (- (:x b) (:x a))
@@ -174,11 +176,27 @@
 ; пересечения в том, что они будут позже определённого времени. С бесконечностью
 ; нужно проверять меньше условий.
 
+(comment (defn positive-root-of-square-equation ^double [^double a ^double b ^double c]
+           (or (if (zero? a)
+                 (if-not (zero? b)
+                   (let [t (/ (- c) b)]
+                     (if (<= 0.0 t) t)))
+                 (let [D (- (* b b) (* 4.0 a c))]
+                   (if (<= 0.0 D)
+                     (let [D-sqrt (Math/sqrt D)
+                           a-rcpr (/ (* 2.0 a))
+                           tp     (* (+ (- b) D-sqrt) a-rcpr)
+                           tm     (* (- (- b) D-sqrt) a-rcpr)
+                           t-max  (max tp tm)
+                           t-min  (min tp tm)]
+                       (if (<= 0.0 t-min) t-min (if (<= 0.0 t-max) t-max))))))
+               Double/POSITIVE_INFINITY)))
+
 (defn positive-root-of-square-equation ^double [^double a ^double b ^double c]
   (or (if (zero? a)
         (if-not (zero? b)
           (let [t (/ (- c) b)]
-            (if (<= 0.0 t) t)))
+            (if (< 0.0 t) t)))
         (let [D (- (* b b) (* 4.0 a c))]
           (if (<= 0.0 D)
             (let [D-sqrt (Math/sqrt D)
@@ -187,7 +205,7 @@
                   tm     (* (- (- b) D-sqrt) a-rcpr)
                   t-max  (max tp tm)
                   t-min  (min tp tm)]
-              (if (<= 0.0 t-min) t-min (if (<= 0.0 t-max) t-max))))))
+              (if (< 0.0 t-min) t-min (if (< 0.0 t-max) t-max))))))
       Double/POSITIVE_INFINITY))
 
 (defn square-extremum [^double a ^double b ^double c ^double t]

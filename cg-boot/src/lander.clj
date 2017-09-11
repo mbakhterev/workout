@@ -339,14 +339,14 @@
                      ^double dt]
   (let [ax (x-acceleration a p)
         ay (y-acceleration a p)
-        x-next (g/poly-2 ax vx x dt)
-        y-next (g/poly-2 ay vy y dt)]
+        x-next (g/poly-2 (* 0.5 ax) vx x dt)
+        y-next (g/poly-2 (* 0.5 ay) vy y dt)]
     (and (< dt (g/time-to-intersect-2d p [ax vx x] [ay vy y] section))
-         (or (not (g/non-zero? (g/normal-projection section x-next y-next))))
+         (or (g/non-zero? (g/normal-projection section x-next y-next)) (g/over-line? section x y))
          (< dt (g/time-to-intersect-1d ay vy y g/y-max))
-         (or (not (g/non-zero? (- y g/y-max))) (<= y-next g/y-max))
+         (or (g/non-zero? (- y g/y-max)) (<= y-next g/y-max))
          (< dt (g/time-to-intersect-1d ax vx x ox))
-         (or (not (g/non-zero? (- x ox))) (pos? (* dir (- x-next ox)))))))
+         (or (g/non-zero? (- x ox)) (pos? (* dir (- x-next ox)))))))
 
 (comment (defn- hover-align-control ^Move [^geometry.Stage {section :section :as stage}
                                            ^Lander {y :y :as lander}
@@ -404,7 +404,7 @@
         t  (Math/ceil (g/time-to-intersect-1d ax vx x xt))]
     (if (and (Double/isFinite t)
              (hover-alive? stage lander control t))
-      (let [l (just-move control t lander)] 
+      (let [l  (just-move control t lander)]
         (if (constraint l stage)
           (->Move :ok l t))))))
 
@@ -420,7 +420,7 @@
 (defn- hover-integrate [^geometry.Stage stage ^Lander lander ^Control control]
   (let [{state :state :as ma} (hover-align-control stage lander control)]
     (case state
-      :ok (if-let [mi (hover-steady-control stage (:lander ma))] (list mi ma))
+      :ok (if-let [mi (hover-steady-control stage l)] (list mi ma))
       :out (list ma))))
 
 ; Облако возможных управлений на стадии hover
@@ -428,13 +428,13 @@
 (def ^:const ^:private angle-delta 15) 
 
 (comment (defn- hover-control-cloud [^Stage stage ^Lander lander]
-  (for [p (range 0 5)
-        a (let [a-left (:angle (:control (:lander (hover-align-control stage lander (->Control -90 p)))))
-                a-right (:angle (:control (:lander (hover-align-control stage lander (->Control 90 p)))))]
-            (if-not (:left? stage)
-              (range a-left (+ a-right 1) angle-delta)
-              (range a-right (- a-left 1) (- angle-delta))))]
-    (->Control a p))))
+           (for [p (range 0 5)
+                 a (let [a-left (:angle (:control (:lander (hover-align-control stage lander (->Control -90 p)))))
+                         a-right (:angle (:control (:lander (hover-align-control stage lander (->Control 90 p)))))]
+                     (if-not (:left? stage)
+                       (range a-left (+ a-right 1) angle-delta)
+                       (range a-right (- a-left 1) (- angle-delta))))]
+             (->Control a p))))
 
 (defn- hover-control-cloud [^Stage {dir :direction :as stage} ^Lander lander]
   (for [p (range 0 5)
@@ -443,7 +443,7 @@
             (if-not (pos? dir)
               (range a-left (+ a-right 1) angle-delta)
               (range a-right (- a-left 1) (- angle-delta))))]
-    (->Control a p)))
+  (->Control a p)))
 
 (defn- hover-guide [^geometry.Stage stage next-stages ^Lander lander]
   (if (hover-initial-ok? lander stage)
@@ -473,15 +473,20 @@
 (defn- brake-initial-ok? [^Lander {y :y :as lander} ^geometry.Stage {section :section}]
   (and (<= y g/y-max) (over-section? lander section)))
 
-(defn- brake-alive? [^geometry.Stage {xt :x-target xo :x-opposite}
+(defn- brake-alive? [^geometry.Stage {{ax-pad :ax bx-pad :bx} :section}
                      ^Lander {x :x y :y vx :vx vy :vy}
                      ^Control {a :angle p :power}
                      ^double dt]
   (let [ax (x-acceleration a p)
-        ay (y-acceleration a p)]
-    (and (< dt (g/time-to-intersect-1d ax vx x xo))
-         (< dt (g/time-to-intersect-1d ax vx x xt))
-         (< dt (g/time-to-intersect-1d ay vy y g/y-max)))))
+        ay (y-acceleration a p)
+        x-next (poly-2 (* 0.5 ax) vx x dt)
+        y-next (poly-2 (* 0.5 ay) vy y dt)]
+    (and (< dt (g/time-to-intersect-1d ax vx x ax-pad))
+         (or (g/non-zero? (- x ax-pad)) (>= x-next ax-pad))
+         (< dt (g/time-to-intersect-1d ax vx x bx-pad))
+         (or (g/non-zero? (- x bx-pad)) (<= x-next bx-pad))
+         (< dt (g/time-to-intersect-1d ay vy y g/y-max))
+         (or (g/non-zero? (- x g/y-max)) (<= y-next g/y-max)))))
 
 (defn- brake-align-control ^Move [^Lander lander ^geometry.Stage stage ^Control control]
   (loop [{lc :control :as l} lander t 0.0]
@@ -496,7 +501,7 @@
 ; плохой контроль, и можно было бы потратить меньше топлива на остановку.
  
 (defn- solve-brake-2 [^Lander {vx :vx {angle :angle power :power :as ctl} :control :as lander}
-                      ^geomtrey.Stage {pad :pad :as stage}]
+                      ^geomtrey.Stage {pad :section :as stage}]
   (let [ax (x-acceleration angle power)]
     (if (= ax 0.0)
       (->Move :ok lander 0.0)
@@ -508,15 +513,14 @@
                      (on-radar? l))
               (->Move :ok l t))))))))
 
-(defn- brake-integrate [^geometry.Stage {pad :pad :as stage}
+(defn- brake-integrate [^geometry.Stage {pad :section :as stage}
                         ^Lander lander
                         ^Control ctl]
   (when-let [m-1 (brake-align-control lander stage ctl)]
     (when-let [m-3 (brake-align-control (:lander m-1) stage (->Control 0 4))]
       (when-let [m-2 (solve-brake-2 (assoc (:lander m-3) :control ctl) stage)]
         (when-let [dc (descend-constraint (:lander m-2))]
-          (let [dh-reserve 0.125
-                l (:lander m-2)
+          (let [l (:lander m-2)
                 hr (+ (:y l) (reserve-dh (:h dc)))]
           (if (and (< (:ay pad) hr)
                    (< (* 4.0 (:t dc)) (:fuel (:lander m-3))))
@@ -524,10 +528,12 @@
 
 ; По скорости можно определить какой диапазон ускорений следует рассматривать
 
-(defn- brake-control-cloud [^Lander {vx :vx}]
-  (if (>= vx 0.0)
-    (for [p (range 1 5) a (range 0 91 angle-delta)] (->Control a p))
-    (for [p (range 1 5) a (range -90 1 angle-delta)] (->Control a p))))
+(let [left-brake-cloud (vec (for [p (range 1 5) a (range 0 91 angle-delta)] (->Control a p)))
+      right-brake-cloud  (vec (for [p (range 1 5) a (range -90 1 angle-delta)] (->Control a p)))]
+  (defn- brake-control-cloud [^Lander {vx :vx}]
+    (if (>= vx 0.0)
+      left-brake-cloud
+      right-brake-cloud)))
 
 (defn- brake-guide [^geometry.Stage stage next-stages ^Lander lander]
   (loop [cloud (keep (partial brake-integrate stage lander) (brake-control-cloud lander))]
