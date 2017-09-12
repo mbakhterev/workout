@@ -420,7 +420,7 @@
 (defn- hover-integrate [^geometry.Stage stage ^Lander lander ^Control control]
   (let [{state :state :as ma} (hover-align-control stage lander control)]
     (case state
-      :ok (if-let [mi (hover-steady-control stage l)] (list mi ma))
+      :ok (if-let [mi (hover-steady-control stage (:lander ma))] (list mi ma))
       :out (list ma))))
 
 ; Облако возможных управлений на стадии hover
@@ -479,8 +479,8 @@
                      ^double dt]
   (let [ax (x-acceleration a p)
         ay (y-acceleration a p)
-        x-next (poly-2 (* 0.5 ax) vx x dt)
-        y-next (poly-2 (* 0.5 ay) vy y dt)]
+        x-next (g/poly-2 (* 0.5 ax) vx x dt)
+        y-next (g/poly-2 (* 0.5 ay) vy y dt)]
     (and (< dt (g/time-to-intersect-1d ax vx x ax-pad))
          (or (g/non-zero? (- x ax-pad)) (>= x-next ax-pad))
          (< dt (g/time-to-intersect-1d ax vx x bx-pad))
@@ -500,40 +500,67 @@
 ; равна 0. (2.2) считаем, что должны хотя бы 0 секунд тормозить. Иначе, нам дали
 ; плохой контроль, и можно было бы потратить меньше топлива на остановку.
  
-(defn- solve-brake-2 [^Lander {vx :vx {angle :angle power :power :as ctl} :control :as lander}
-                      ^geomtrey.Stage {pad :section :as stage}]
-  (let [ax (x-acceleration angle power)]
-    (if (= ax 0.0)
-      (->Move :ok lander 0.0)
-      (let [tb (/ (- vx) ax)]
-        (if (<= 0.0 tb)
-          (let [t (Math/ceil tb)
-                l (move ctl t lander)]
-            (if (and (over-section? l pad)
-                     (on-radar? l))
-              (->Move :ok l t))))))))
+(comment (defn- solve-brake-2 [^Lander {vx :vx control :control :as lander}
+                               ^geomtrey.Stage {pad :section :as stage}]
+           (let [ax (x-acceleration control)]
+             (if (= ax 0.0)
+               (->Move :ok lander 0.0)
+               (let [tb (/ (- vx) ax)]
+                 (if (<= 0.0 tb)
+                   (let [t (Math/ceil tb)
+                         l (move control t lander)]
+                     (if (and (over-section? l pad)
+                              (on-radar? l))
+                       (->Move :ok l t)))))))))
 
-(defn- brake-integrate [^geometry.Stage {pad :section :as stage}
+(defn- solve-brake-2 ^Move [^Lander {vx :vx :as lander}
+                            ^Control control
+                            ^geometry.Stage stage]
+  (let [ax (x-acceleration control)]
+    ; Если ускорение по x нулевое, то нет смысла тормозить с таким ускорением.
+    ; Но полёт при этом нормальный, поэтому просто возвращаем lander. С текущим
+    ; для lander контролем
+    (if (zero? ax)
+      (->Move :ok lander 0.0)
+      (let [t-brake (Math/ceil (g/time-to-brake ax vx))]
+        (if (and (Double/isFinite t-brake)
+                 (brake-alive? stage lander control t-brake))
+          (->Move :ok (just-move control t-brake lander)))))))
+
+(comment (defn- brake-integrate [^geometry.Stage {pad :section :as stage}
+                                 ^Lander lander
+                                 ^Control ctl]
+           (when-let [m-1 (brake-align-control lander stage ctl)]
+             (when-let [m-3 (brake-align-control (:lander m-1) stage (->Control 0 4))]
+               (when-let [m-2 (solve-brake-2 (assoc (:lander m-3) :control ctl) stage)]
+                 (when-let [dc (descend-constraint (:lander m-2))]
+                   (let [l (:lander m-2)
+                         hr (+ (:y l) (reserve-dh (:h dc)))]
+                     (if (and (< (:ay pad) hr)
+                              (< (* 4.0 (:t dc)) (:fuel (:lander m-3))))
+                       (list m-3 m-2 m-1))))))))) 
+
+(defn- brake-integrate [^geometry.Stage {y-pad :y-pad :as stage} 
                         ^Lander lander
-                        ^Control ctl]
-  (when-let [m-1 (brake-align-control lander stage ctl)]
+                        ^Control control]
+  (when-let [m-1 (brake-align-control lander stage control)]
     (when-let [m-3 (brake-align-control (:lander m-1) stage (->Control 0 4))]
-      (when-let [m-2 (solve-brake-2 (assoc (:lander m-3) :control ctl) stage)]
+      (when-let [m-2 (solve-brake-2 (:lander m-3) control stage)]
         (when-let [dc (descend-constraint (:lander m-2))]
           (let [l (:lander m-2)
                 hr (+ (:y l) (reserve-dh (:h dc)))]
-          (if (and (< (:ay pad) hr)
-                   (< (* 4.0 (:t dc)) (:fuel (:lander m-3))))
-            (list m-3 m-2 m-1)))))))) 
+          (if (and (< y-pad hr)
+                   (< (* 4.0 (:t dc)) (:fuel (:lander m-2))))
+            (list m-3 m-2 m-1))))))))
 
 ; По скорости можно определить какой диапазон ускорений следует рассматривать
 
-(let [left-brake-cloud (vec (for [p (range 1 5) a (range 0 91 angle-delta)] (->Control a p)))
-      right-brake-cloud  (vec (for [p (range 1 5) a (range -90 1 angle-delta)] (->Control a p)))]
+(let [left-cloud (vec (for [p (range 1 5) a (range 0 91 angle-delta)] (->Control a p)))
+      right-cloud  (vec (for [p (range 1 5) a (range -90 1 angle-delta)] (->Control a p)))]
   (defn- brake-control-cloud [^Lander {vx :vx}]
     (if (>= vx 0.0)
-      left-brake-cloud
-      right-brake-cloud)))
+      left-cloud
+      right-cloud)))
 
 (defn- brake-guide [^geometry.Stage stage next-stages ^Lander lander]
   (loop [cloud (keep (partial brake-integrate stage lander) (brake-control-cloud lander))]
@@ -548,25 +575,39 @@
 ; (контроль a 4), который позволит погасить остаточную скорость, оставаясь в
 ; границах pad.
 
-(defn solve-descend-one [^Lander {x :x vx :vx y :y :as lander}
-                          ^geometry.Stage {pad :pad :as stage}]
-  (if (= 0.0 vx)
+(comment (defn solve-descend-one [^Lander {x :x vx :vx y :y :as lander}
+                                  ^geometry.Stage {pad :pad :as stage}]
+           (if (= 0.0 vx)
+             (->Move :done lander 0.0)
+             (let [vy-average -20.0
+                   bx (if (< 0.0 vx) (:bx pad) (:ax pad)) 
+                   tb (/ (- bx x) vx) 
+                   ta (Math/ceil (/ (- (:ay pad) y) vy-average))]
+               (if (and (< (Math/abs ^double vx) max-final-vx)
+                        (<= ta tb))
+                 (->Move :done lander 0.0)
+                 (let [xi (if (> 0.0 vx) 7 -7)
+                       ax (x-acceleration xi 4)
+                       tc (Math/ceil (/ (- vx) ax))
+                       l  (move (->Control xi 4) tc lander)
+                       dc (descend-constraint l)]
+                   (if (and (in-range? l pad)
+                            (< (:ay dc) (+ (:y l) (:h dc))))
+                     (-> Move :ok l tc)))))))) 
+
+; Решение для стадии (4) торможения. Пробуем гасить остаточную скорость с управлениями
+; (контроль (одно-из 7 -7) 4). Собственно, вот и вся логика
+
+
+(defn- w-enought )
+
+(defn- solve-descend ^Move [^Lander {x :X vx :vx y :y :as lander}
+                            ^geometry.Stage stage]
+  (if (g/near-zero vx)
     (->Move :done lander 0.0)
-    (let [vy-average -20.0
-          bx (if (< 0.0 vx) (:bx pad) (:ax pad)) 
-          tb (/ (- bx x) vx) 
-          ta (Math/ceil (/ (- (:ay pad) y) vy-average))]
-      (if (and (< (Math/abs ^double vx) max-final-vx)
-               (<= ta tb))
-        (->Move :done lander 0.0)
-        (let [xi (if (> 0.0 vx) 7 -7)
-              ax (x-acceleration xi 4)
-              tc (Math/ceil (/ (- vx) ax))
-              l  (move (->Control xi 4) tc lander)
-              dc (descend-constraint l)]
-          (if (and (in-range? l pad)
-                   (< (:ay dc) (+ (:y l) (:h dc))))
-            (-> Move :ok l tc))))))) 
+    (let )))
+
+
 
 (defn- descend-guide [^geometry.Stage stage ^Lander lander]
   (loop [l lander R (list)]

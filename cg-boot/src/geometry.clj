@@ -234,6 +234,13 @@
 (defn time-to-intersect-1d ^double [^double ax ^double vx ^double x ^double tx]
   (positive-root-of-square-equation (* 0.5 ax) vx (- x tx)))
 
+; Время достижения сброса некоторой скорости до нуля. Как и прежде, +Inf
+; означает «никогда»
+
+(defn time-to-brake ^double [^double ax ^double vx]
+  (let [t (/ (- vx) ax)]
+    (if (>= t 0.0) t Double/POSITIVE_INFINITY)))
+
 ; Построение стадий полёта.
 
 (declare descend-stage
