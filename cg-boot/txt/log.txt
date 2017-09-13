@@ -163,3 +163,21 @@ bx (без ограничения общности), то решение ура�
 
 Ладно. Значит, получается так: проверяем на dt. Если условие на пересечение
 выполнено, то всё плохо. Если не выполнено, тогда если dt близко. Да хрень!
+
+Ср сен 13 12:20:50 +05 2017
+
+Вот в этом месте
+
+(defn- brake-guide [^geometry.Stage stage next-stages ^Lander lander]
+  (if (brake-initial-ok? lander stage)
+    (loop [cloud (keep (partial brake-integrate stage lander) (brake-control-cloud lander))]
+      (when-first [m cloud]
+        (let [k (:lander (first m))
+              l (:lander (second m))]
+          (if-let [m-next (search-guide next-stages (assoc l :control (:control k)))]
+            (cons m m-next)
+            (recur (next cloud))))))))
+
+KL-чехарду надо бы убрать из этого места в brake-integrate. Хотя, не факт, что
+мути будет меньше. Пока оставляю текущий вариант.
+

@@ -549,9 +549,9 @@
         (when-let [dc (descend-constraint (:lander m-2))]
           (let [l (:lander m-2)
                 hr (+ (:y l) (reserve-dh (:h dc)))]
-          (if (and (< y-pad hr)
-                   (< (* 4.0 (:t dc)) (:fuel (:lander m-2))))
-            (list m-3 m-2 m-1))))))))
+            (if (and (< y-pad hr)
+                     (< (* 4.0 (:t dc)) (:fuel (:lander m-2))))
+              (list m-3 m-2 m-1))))))))
 
 ; По скорости можно определить какой диапазон ускорений следует рассматривать
 
@@ -563,13 +563,14 @@
       right-cloud)))
 
 (defn- brake-guide [^geometry.Stage stage next-stages ^Lander lander]
-  (loop [cloud (keep (partial brake-integrate stage lander) (brake-control-cloud lander))]
-    (when-first [m cloud]
-      (let [k (:lander (first m))
-            l (:lander (second m))]
-        (if-let [m-next (search-guide next-stages (assoc l :control (:control k)))]
-        (cons m m-next)
-        (recur (next cloud)))))))
+  (if (brake-initial-ok? lander stage)
+    (loop [cloud (keep (partial brake-integrate stage lander) (brake-control-cloud lander))]
+      (when-first [m cloud]
+        (let [k (:lander (first m))
+              l (:lander (second m))]
+          (if-let [m-next (search-guide next-stages (assoc l :control (:control k)))]
+            (cons m m-next)
+            (recur (next cloud))))))))
 
 ; Решение для стадии (4) торможения. Тонкости. (4.1) ищем такой угол a для
 ; (контроль a 4), который позволит погасить остаточную скорость, оставаясь в
@@ -593,28 +594,43 @@
                        dc (descend-constraint l)]
                    (if (and (in-range? l pad)
                             (< (:ay dc) (+ (:y l) (:h dc))))
-                     (-> Move :ok l tc)))))))) 
+                     (->Move :ok l tc)))))))) 
 
 ; Решение для стадии (4) торможения. Пробуем гасить остаточную скорость с управлениями
-; (контроль (одно-из 7 -7) 4). Собственно, вот и вся логика
+; (контроль (одно-из 7 -7) 4). Собственно, вот и вся логика. Функция quite-slow?
+; определяет, достаточно ли медленно горизонтальное движение. Достаточность
+; определяется как то, что время полёта до границы посадочного стакана меньше,
+; чем время полёта до дна. Время полёта до дна - галимая эвристика: примерно
+; считаем скоростью спуска -20.0. Код старается преувеличить это время спуска
 
+(let [vy-average -20.0]
+  (defn- quite-slow? [^Lander {x :x vx :vx y :y :as lander}
+                      ^geometry.Stage {pad :section}]
+    (or (g/near-zero? vx)
+        (let [x-pad (if (pos? vx) (:bx pad) (:ax pad))
+              t-out (/ (- x-pad x) vx)
+              t-drop (Math/ceil (/ (- (:ay pad) y) vy-average))]
+          (and (< (Math/abs ^double vx) max-final-vx)
+               (<= t-drop t-out))))))
 
-(defn- w-enought )
-
-(defn- solve-descend ^Move [^Lander {x :X vx :vx y :y :as lander}
+(defn- solve-descend ^Move [^Lander {vx :vx :as lander}
                             ^geometry.Stage stage]
-  (if (g/near-zero vx)
+  (if (quite-slow? lander stage)
     (->Move :done lander 0.0)
-    (let )))
-
-
+    (let [xi (if (neg? vx) 7 -7)
+          ax (x-acceleration xi 4)
+          t  (Math/ceil (/ (- vx) ax))
+          c  (->Control xi 4)]
+      (if (brake-alive? stage lander c t)
+        (->Move :ok (just-move c t lander) t)))))
 
 (defn- descend-guide [^geometry.Stage stage ^Lander lander]
-  (loop [l lander R (list)]
-    (if-let [m (solve-descend-one l stage)]
-      (case (:state m)
-        :done R
-        :ok (recur (:lander m) (cons m R))))))
+  (if (brake-initial-ok? lander stage)
+    (loop [l lander R (list)]
+      (if-let [m (solve-descend l stage)]
+        (case (:state m)
+          :done R
+          :ok (recur (:lander m) (cons m R)))))))
 
 (defn- reverse-guide [^geometry.Stage stage ^Lander lander] (list))
 
