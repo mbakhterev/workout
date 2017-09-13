@@ -112,6 +112,10 @@
                                      (recur (+ (:left nr) rx) (count (:cells nr)) (+ y dy) (rest R))))))))
 
 (defn- draw []
+  (q/stroke 255)
+  (q/stroke-weight 3)
+  (q/text "hello world" 500 500)
+
   (let [sc (deref scene)]
     (if (:redraw sc)
       (println "redrawing")
@@ -140,12 +144,17 @@
           (if-let [stages (:stages sc)]
             (do (q/stroke 127)
                 (q/stroke-weight 1)
+                (q/fill 0)
                 (doseq [{x :target t :mark l :left?} stages]
-                  (println "stage mark:" t)
+                  (comment (println "stage mark:" t))
                   (q/line x 0 x (- display-height 1))
                   (if l
-                    (q/text t (- x 5 (q/text-width t)) 10)
-                    (q/text t (+ x 5) 10)))))
+                    (q/text t (- x 7.5 (q/text-width t)) 10)
+                    (q/text t (+ x 7.5) 10))
+                  (let [fy (- 10 (/ (+ (q/text-ascent) (* 0.0 (q/text-descent))) 2.0))]
+                    (if l
+                      (q/line (- x 5) fy x fy)
+                      (q/line (+ x 5) fy x fy))))))
 
           (if-let [landing (:landing-pad sc)]
             (do (q/stroke 255 0 0)
@@ -162,7 +171,7 @@
                     m (:mark t)
                     text-width (q/text-width m)]
                 (q/text m (- (:x l) 5 text-width) (+ (:y l) 10)))))
-          
+
           (if-let [traces (:lander-traces sc)]
             (doseq [t traces]
               (doseq [l (:trace t)] (draw-lander l [255 0 0] [255 0 0]))
@@ -170,7 +179,7 @@
                     m (:mark t)
                     text-width (q/text-width m)]
                 (q/text m (- (:x l) 5 text-width) (+ (:y l) 10))))))))
-  
+
   (swap! scene assoc :redraw false)) 
 
 (defn- setup []

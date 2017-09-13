@@ -130,15 +130,22 @@
                                   {:surface [0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800]
                                    :lander [6500 2800 -90 0 750 90 0]}])
 
-(comment (let [T (test-data 1)
+(comment (let [T (test-data 0)
                S (build-landscape (:surface T))
                L (form-lander (:lander T))
-               stages (detect-stages (:x L) (:vx L) S)]
+               stages (detect-stages (:x L) (:vx L) S)
+               guide (search-guide stages L)]
+           (reset-state)
            (sketch-landscape S)
-           (comment (time (count (tr/dotrace [make-guide] make-guide L S))))
            (next-stages stages)
+           (next-guide guide)
            (sketch-state)
-           (map type (search-guide stages L))))
+           (r/update-scene :guide-traces (vector (model-control guide L)))
+           (map (juxt type count) guide)
+           (model-control guide L)
+           guide
+           ))
+
 
 (defn -main [& args]
   (reset-state)

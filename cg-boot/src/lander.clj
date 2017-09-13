@@ -301,8 +301,6 @@
                (let [tm (Math/ceil r)]
                  (->Move :ok (move ctl tm l) tm))))))
 
-
-
 (comment (defn- hover-align-control [^Stage {section :section :as stage} ^Lander lander ^Control ctl]
            (loop [l lander t 0.0]
              (cond (not (on-radar? l))          (->Move :ko l 0.0)
@@ -420,6 +418,7 @@
 (defn- hover-integrate [^geometry.Stage stage ^Lander lander ^Control control]
   (let [{state :state :as ma} (hover-align-control stage lander control)]
     (case state
+      :ko nil
       :ok (if-let [mi (hover-steady-control stage (:lander ma))] (list mi ma))
       :out (list ma))))
 
@@ -629,7 +628,7 @@
     (loop [l lander R (list)]
       (if-let [m (solve-descend l stage)]
         (case (:state m)
-          :done R
+          :done (list R)
           :ok (recur (:lander m) (cons m R)))))))
 
 (defn- reverse-guide [^geometry.Stage stage ^Lander lander] (list))
