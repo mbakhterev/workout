@@ -7,7 +7,7 @@
 (def ^:private ^:const space-width 7000)
 (def ^:private ^:const space-height 3000) 
 
-(def ^:private ^:const display-width 1500)
+(def ^:private ^:const display-width 1800)
 (def ^:private ^:const display-height (long (* display-width (/ space-height space-width))))
 
 (def ^:private ^:const factor-x (float (/ display-height space-height)))
@@ -21,18 +21,16 @@
                (* factor-y (:ay s))
                (* factor-x (:bx s))
                (* factor-y (:by s))
-               (* factor-k (:k s))
-               (* factor-x (:mx s))
-               nil))
+               (* factor-x (:nx s))
+               (* factor-y (:ny s))))
 
 (defn- invert-y [^double y] (- display-height y))
 
 (defn- correct-y-section [s]
   (g/->Section (:ax s) (invert-y (:ay s))
                (:bx s) (invert-y (:by s))
-               (:k s)
-               (:mx s)
-               nil))
+               (:nx s)
+               (:ny s)))
 
 (defn- correct-surface [sections]
   (map (comp correct-y-section scale-section) sections))
@@ -50,11 +48,11 @@
     {:trace (map correct-lander L)
      :mark  (str (apply format "%d|%.3f|%.3f|%d|%d" ((juxt :fuel :vx :vy (comp :angle :control) (comp :power :control)) l)))}))
 
-(defn- correct-stage [s]
+(defn- correct-stage [^geometry.Stage s]
   (if (#{:hover :brake :reverse} (:stage s))
-    {:target (* factor-x (:x-goal s))
-     :mark (str (:stage s) (if (:left? s) " left" " right"))
-     :left? (:left? s)}))
+    {:target (* factor-x (:x-target s))
+     :mark (str (:stage s) (if (pos? (:direction s)) " left" " right"))
+     :left? (pos? (:direction s))}))
 
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag
@@ -143,6 +141,7 @@
             (do (q/stroke 127)
                 (q/stroke-weight 1)
                 (doseq [{x :target t :mark l :left?} stages]
+                  (println "stage mark:" t)
                   (q/line x 0 x (- display-height 1))
                   (if l
                     (q/text t (- x 5 (q/text-width t)) 10)

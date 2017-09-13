@@ -1,7 +1,8 @@
 (ns main (:gen-class)
          (:require [lander :refer :all]
                    [geometry :refer :all]
-                   [render :as r]))
+                   [render :as r]
+                   [clojure.tools.trace :as tr]))
 
 (set! *warn-on-reflection* true)
 
@@ -62,8 +63,9 @@
                  :vx (Math/round ^double (:vx l))
                  :vy (Math/round ^double (:vy l)))))))
 
-(defn- make-guide [^lander.Lander i-lander ^geometry.Landscape scape]
-  (let [stages (detect-stages i-lander scape)]
+(defn- ^:dynamic make-guide [^lander.Lander {x :x vx :vx :as i-lander}
+                             ^geometry.Landscape scape]
+  (let [stages (detect-stages x vx scape)]
     (next-stages stages)
     (sketch-state)
     (debugln :make-guide stages)
@@ -127,6 +129,16 @@
                                   
                                   {:surface [0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800]
                                    :lander [6500 2800 -90 0 750 90 0]}])
+
+(comment (let [T (test-data 1)
+               S (build-landscape (:surface T))
+               L (form-lander (:lander T))
+               stages (detect-stages (:x L) (:vx L) S)]
+           (sketch-landscape S)
+           (comment (time (count (tr/dotrace [make-guide] make-guide L S))))
+           (next-stages stages)
+           (sketch-state)
+           (map type (search-guide stages L))))
 
 (defn -main [& args]
   (reset-state)

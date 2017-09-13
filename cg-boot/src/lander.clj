@@ -341,7 +341,7 @@
         ay (y-acceleration a p)
         x-next (g/poly-2 (* 0.5 ax) vx x dt)
         y-next (g/poly-2 (* 0.5 ay) vy y dt)]
-    (and (< dt (g/time-to-intersect-2d p [ax vx x] [ay vy y] section))
+    (and (< dt (g/time-to-intersect-2d [ax vx x] [ay vy y] section))
          (or (g/non-zero? (g/normal-projection section x-next y-next)) (g/over-line? section x y))
          (< dt (g/time-to-intersect-1d ay vy y g/y-max))
          (or (g/non-zero? (- y g/y-max)) (<= y-next g/y-max))
@@ -525,7 +525,7 @@
       (let [t-brake (Math/ceil (g/time-to-brake ax vx))]
         (if (and (Double/isFinite t-brake)
                  (brake-alive? stage lander control t-brake))
-          (->Move :ok (just-move control t-brake lander)))))))
+          (->Move :ok (just-move control t-brake lander) t-brake))))))
 
 (comment (defn- brake-integrate [^geometry.Stage {pad :section :as stage}
                                  ^Lander lander

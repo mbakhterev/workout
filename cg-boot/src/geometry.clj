@@ -265,7 +265,7 @@
     (concat (reverse-stage x vx pad rock)
             (hover-stages x pad rock)
             (brake-stage x vx pad)
-            (descend-stage x vx pad))))
+            (descend-stage x pad))))
 
 (comment (defn- brake-stage [^Lander {x :x vx :vx :as lander}
                              ^geometry.Section {ax :ax ay :ay bx :bx :as pad}
@@ -309,11 +309,11 @@
                      rock]
   (letfn [(on-left [^Section s]
             (if (< x (:bx s) bx-pad)
-              (map (fn [^double o ^double t] (->Stage s t o bx-pad y-pad 1 :hover nil))
+              (map (fn [[^double o ^double t]] (->Stage s t o bx-pad y-pad 1 :hover nil))
                    (divide-stage (max (:ax s) x) (:bx s)))))
           (on-right [^Section s]
             (if (> x (:ax s) ax-pad)
-              (map (fn [^double o ^double t] (->Stage s t o ax-pad y-pad -1 :hover nil))
+              (map (fn [[^double o ^double t]] (->Stage s t o ax-pad y-pad -1 :hover nil))
                    (divide-stage (min x (:bx s)) (:ax s)))))
           (divide-stage [^double a ^double b]
             (partition 2 1 (concat (range a b (* (compare b a) 2048.0)) (list b))))]
