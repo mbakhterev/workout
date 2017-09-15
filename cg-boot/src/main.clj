@@ -1,8 +1,7 @@
 (ns main (:gen-class)
          (:require [lander :refer :all]
                    [geometry :refer :all]
-                   [render :as r]
-                   [clojure.tools.trace :as tr]))
+                   [render :as r]))
 
 (set! *warn-on-reflection* true)
 
@@ -140,12 +139,10 @@
            (next-stages stages)
            (next-guide guide)
            (sketch-state)
-           (r/update-scene :guide-traces (vector (model-control guide L)))
+           (r/update-scene :guide-traces (filter (comp not empty?) (model-control guide L)))
            (map (juxt type count) guide)
            (model-control guide L)
-           guide
-           ))
-
+           guide)) 
 
 (defn -main [& args]
   (reset-state)
