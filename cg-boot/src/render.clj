@@ -7,7 +7,7 @@
 (def ^:private ^:const space-width 7000)
 (def ^:private ^:const space-height 3000) 
 
-(def ^:private ^:const display-width (- 1600 16))
+(def ^:private ^:const display-width (- 1920 16))
 (def ^:private ^:const display-height (long (* display-width (/ space-height space-width))))
 
 (def ^:private ^:const factor-x (float (/ display-height space-height)))
@@ -43,10 +43,11 @@
               (:fuel l)
               (:control l)))
 
-(defn- correct-trace [L]
+(defn- correct-trace [full-mark? L]
   (let [l (last L)]
     {:trace (map correct-lander L)
-     :mark  (str (apply format "%d|%.3f|%.3f|%d|%d" ((juxt :fuel :vx :vy (comp :angle :control) (comp :power :control)) l)))}))
+     :mark  (let [m (format "%d|%d" (:angle (:control l)) (:power (:control l)))]
+              (str (if full-mark? (format "%d|%.3f|%.3f|" (:fuel l) (:vx l) (:vy l))) m))}))
 
 (defn- correct-stage [^geometry.Stage s]
   (if (#{:hover :brake :reverse} (:stage s))
@@ -54,18 +55,22 @@
      :mark (str (:stage s) (if (pos? (:direction s)) " left" " right"))
      :left? (pos? (:direction s))}))
 
+(defn- update-traces [traces]
+  (concat (map (partial correct-trace false) (drop-last traces))
+          (list (correct-trace true (last traces)))))
+
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag
                            :surface (correct-surface value)
                            :shell (correct-surface value)
                            :landing-pad (correct-y-section (scale-section value))
-                           :guide-traces (if value (map correct-trace value))
-                           :lander-traces (if value (map correct-trace value))
+                           :guide-traces (if (not (empty? value)) (update-traces value))
+                           :lander-traces (if (not (empty? value)) (update-traces value))
                            :stages (if value (keep correct-stage value)))
                      :redraw true)
   true)
 
-(defn- draw-lander [l a-color v-color]
+(defn- draw-lander [^lander.Lander l color ^long r]
   (let [c  (:control l)
         x  (:x l)
         y  (:y l)
@@ -75,11 +80,21 @@
         ay (* (:power c) (Math/cos (Math/toRadians (+ 0 (:angle c)))))]
     (q/no-stroke)
     (q/fill 0)
-    (q/ellipse (:x l) (:y l) 4 4)
-    (apply q/stroke a-color)
+    (q/ellipse (:x l) (:y l) r r)
+    (apply q/stroke color)
     (q/line x y (+ x (* 4 ax)) (+ y (* 4 ay)))
-    (apply q/stroke v-color)
+    (apply q/stroke color)
     (q/line x y (+ x vx) (+ y vy)))) 
+
+(defn- draw-traces [traces color]
+  (doseq [t traces]
+    (when (not (empty? t))
+      (doseq [l (drop-last (:trace t))] (draw-lander l color 4))
+      (let [l (last (:trace t))
+            m (:mark t)
+            text-width (q/text-width m)]
+        (draw-lander l color 6)
+        (q/text m (- (:x l) 5 text-width) (+ (:y l) 10))))))
 
 (def ^:private ^:const rG 10.0)
 
@@ -165,21 +180,23 @@
                   (mark-point (:bx landing) (:by landing)))))
 
           (if-let [traces (:guide-traces sc)]
-            (doseq [t traces]
-              (doseq [l (:trace t)] (draw-lander l [0 0 255] [0 0 255]))
-              (let [l (last (:trace t))
-                    m (:mark t)
-                    text-width (q/text-width m)]
-                (q/text m (- (:x l) 5 text-width) (+ (:y l) 10))
-                (q/ellipse (:x l) (:y l) 6 6))))
+            (draw-traces traces [0 0 255])
+            (comment (doseq [t traces]
+                       (doseq [l (:trace t)] (draw-lander l [0 0 255] [0 0 255]))
+                       (let [l (last (:trace t))
+                             m (:mark t)
+                             text-width (q/text-width m)]
+                         (q/text m (- (:x l) 5 text-width) (+ (:y l) 10))
+                         (q/ellipse (:x l) (:y l) 6 6)))))
 
           (if-let [traces (:lander-traces sc)]
-            (doseq [t traces]
-              (doseq [l (:trace t)] (draw-lander l [255 0 0] [255 0 0]))
-              (let [l (last (:trace t))
-                    m (:mark t)
-                    text-width (q/text-width m)]
-                (q/text m (- (:x l) 5 text-width) (+ (:y l) 10))))))))
+            (draw-traces traces [255 0 0])
+            (comment (doseq [t traces]
+                       (doseq [l (:trace t)] (draw-lander l [255 0 0] [255 0 0]))
+                       (let [l (last (:trace t))
+                             m (:mark t)
+                             text-width (q/text-width m)]
+                         (q/text m (- (:x l) 5 text-width) (+ (:y l) 10)))))))))
 
   (swap! scene assoc :redraw false)) 
 
