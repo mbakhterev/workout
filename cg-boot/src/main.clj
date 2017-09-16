@@ -26,7 +26,7 @@
     (r/update-scene :stages nil)) 
 
   (defn- next-guide [g]
-    (swap! state (fn [st] (assoc st :guides (concat (:guides st) g))))) 
+    (swap! state (fn [st] (assoc st :guides (concat (:guides st) (filter (comp not empty?) g)))))) 
 
   (defn- next-trace [^lander.Lander l]
     (swap! state (fn [st] (assoc st :traces (conj (:traces st) [l])))))
@@ -34,12 +34,20 @@
   (defn- next-stages [s]
     (swap! state (fn [st] (assoc st :stages (conj (:stages st) s)))))
 
+  (comment (defn- unpack-traces [t]
+             (and (not (empty? t))
+                  (not (empty? (last t)))
+                  (= lander.Lander (type (last (last t))))
+                  ;[(drop-last t) (last t)]
+                  [(vec (drop-last t)) (vec (last t))]
+                  )))
+
   (defn- unpack-traces [t]
-    (and (not (empty? t))
-         (not (empty? (last t)))
-         (= lander.Lander (type (last (last t))))
-         ; [(vec (drop-last t)) (vec (last t))]
-         [(drop-last t) (last t)]))
+    (if (and (not (empty? t))
+             (not (empty? (last t)))
+             (= lander.Lander (type (last (last t)))))
+      ; [(drop-last t) (last t)]
+      [(vec (drop-last t)) (vec (last t))]))
 
   (defn- sketch-state []
     (let [st (deref state)]
@@ -142,6 +150,7 @@
            (r/update-scene :guide-traces (filter (comp not empty?) (model-control guide L)))
            (map (juxt type count) guide)
            (model-control guide L)
+           (make-guide L S)
            guide)) 
 
 (defn -main [& args]

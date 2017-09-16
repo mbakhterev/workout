@@ -100,10 +100,10 @@
                        (- fuel (* power t))
                        nc))))
 
-(defn move ^Lander [^Control ctl ^double t ^Lander {lc :control :as l}]
-  (let [nc (control-to lc ctl)]
-    (assert (or (= 1.0 t) (= nc ctl)))
-    (just-move ctl t l)))
+(defn move ^Lander [^Control target-control ^double t ^Lander {l-control :control :as l}]
+  (let [next-control (control-to l-control target-control)]
+    (assert (or (= 1.0 t) (= next-control target-control)))
+    (just-move next-control t l)))
 
 ; Проверки того, что модуль над поверхностью Марса
 
@@ -365,13 +365,13 @@
 
 (defn- hover-align-control ^Move [^geometry.Stage {section :section xt :x-target dir :direction :as stage}
                                   ^Lander lander
-                                  ^Control ctl]
-  (loop [{lc :control x :x :as l} lander t 0.0]
-    (cond (= ctl lc) (->Move :ok l t)
+                                  ^Control target-control]
+  (loop [{l-control :control x :x :as l} lander t 0.0]
+    (cond (= target-control l-control) (->Move :ok l t)
           (pos? (* dir (- x xt))) (if (constraint l stage) (->Move :out l t) (->Move :ko l 0.0))
-          :else (let [nc (control-to lc ctl)]
-                  (if (hover-alive? stage l nc 1.0)
-                    (recur (just-move nc 1.0 l) (+ 1.0 t))
+          :else (let [next-control (control-to l-control target-control)]
+                  (if (hover-alive? stage l next-control 1.0)
+                    (recur (just-move next-control 1.0 l) (+ 1.0 t))
                     (->Move :ko l 0.0))))))
 
 (comment (defn- solve-hover [^Lander {x :x vx :vx {a :angle p :power :as ctl} :control :as l}
@@ -472,7 +472,7 @@
 (defn- brake-initial-ok? [^Lander {y :y :as lander} ^geometry.Stage {section :section}]
   (and (<= y g/y-max) (over-section? lander section)))
 
-(defn- brake-alive? [^geometry.Stage {{ax-pad :ax bx-pad :bx} :section}
+(defn- brake-alive? [^geometry.Stage {{ax-pad :ax y-pad :ay bx-pad :bx} :section}
                      ^Lander {x :x y :y vx :vx vy :vy}
                      ^Control {a :angle p :power}
                      ^double dt]
@@ -485,7 +485,9 @@
          (< dt (g/time-to-intersect-1d ax vx x bx-pad))
          (or (g/non-zero? (- x bx-pad)) (<= x-next bx-pad))
          (< dt (g/time-to-intersect-1d ay vy y g/y-max))
-         (or (g/non-zero? (- x g/y-max)) (<= y-next g/y-max)))))
+         (or (g/non-zero? (- y g/y-max)) (<= y-next g/y-max))
+         (< dt (g/time-to-intersect-1d ay vy y y-pad))
+         (or (g/non-zero? (- y y-pad)) (<= y-pad y)))))
 
 (defn- brake-align-control ^Move [^Lander lander ^geometry.Stage stage ^Control control]
   (loop [{lc :control :as l} lander t 0.0]
@@ -592,7 +594,7 @@
                        l  (move (->Control xi 4) tc lander)
                        dc (descend-constraint l)]
                    (if (and (in-range? l pad)
-                            (< (:ay dc) (+ (:y l) (:h dc))))
+                            (< (:ay pad) (+ (:y l) (:h dc))))
                      (->Move :ok l tc)))))))) 
 
 ; Решение для стадии (4) торможения. Пробуем гасить остаточную скорость с управлениями
@@ -613,15 +615,18 @@
                (<= t-drop t-out))))))
 
 (defn- solve-descend ^Move [^Lander {vx :vx :as lander}
-                            ^geometry.Stage stage]
+                            ^geometry.Stage {y-pad :y-pad :as stage}]
   (if (quite-slow? lander stage)
     (->Move :done lander 0.0)
-    (let [xi (if (neg? vx) 7 -7)
+    (let [xi (if (neg? vx) -7 7)
           ax (x-acceleration xi 4)
           t  (Math/ceil (/ (- vx) ax))
           c  (->Control xi 4)]
       (if (brake-alive? stage lander c t)
-        (->Move :ok (just-move c t lander) t)))))
+        (let [l  (just-move c t lander)
+              dc (descend-constraint l)]
+          (if (< y-pad (+ (:y l) (:h dc)))
+            (->Move :ok l t)))))))
 
 (defn- descend-guide [^geometry.Stage stage ^Lander lander]
   (if (brake-initial-ok? lander stage)
