@@ -248,12 +248,18 @@
          descend-guide
          reverse-guide)
 
+; Результатом search-guide должен быть список из списков шагов (Move) для каждой
+; стадии. Списки шагов идут в обратном порядке, чтобы как можно быстрее
+; вытаскивать последнее положение модуля на стадии (оно будет первым в списке и,
+; вполне вероятно, быстро доступным). За это упорядочение отвечают нечтно-guide
+; функции, которые передают эту обязанность в нечто-integrate функции.
+
 (defn search-guide [stages ^Lander lander]
   (if-let [s (first stages)]
     (case (:stage s)
       :reverse (do (debugln :search-guide "reverse") (reverse-guide s (rest stages) lander))  
       :brake   (do (debugln :search-guide "brake") (brake-guide s (rest stages) lander))
-      :hover   (do (debugln :search-guide "hover")(hover-guide s (rest stages) lander))
+      :hover   (do (debugln :search-guide "hover") (hover-guide s (rest stages) lander))
       :descend (do (debugln :search-guide "brake") (descend-guide s lander))
       :else    (assert false))))
 
@@ -447,9 +453,9 @@
 (defn- hover-guide [^geometry.Stage stage next-stages ^Lander lander]
   (if (hover-initial-ok? lander stage)
     (loop [cloud (keep (partial hover-integrate stage lander) (hover-control-cloud stage lander))]
-      (when-first [m cloud]
-        (if-let [m-next (search-guide next-stages (:lander (first m)))]
-          (cons m m-next)
+      (when-first [moves cloud]
+        (if-let [m-next (search-guide next-stages (:lander (first moves)))]
+          (cons moves m-next)
           (recur (next cloud)))))))
 
 ; Торможение - это 3 стадии: (1) торможение с переходом к выбранному контролю;
@@ -566,11 +572,11 @@
 (defn- brake-guide [^geometry.Stage stage next-stages ^Lander lander]
   (if (brake-initial-ok? lander stage)
     (loop [cloud (keep (partial brake-integrate stage lander) (brake-control-cloud lander))]
-      (when-first [m cloud]
-        (let [k (:lander (first m))
-              l (:lander (second m))]
+      (when-first [moves cloud]
+        (let [k (:lander (first moves))
+              l (:lander (second moves))]
           (if-let [m-next (search-guide next-stages (assoc l :control (:control k)))]
-            (cons m m-next)
+            (cons moves m-next)
             (recur (next cloud))))))))
 
 ; Решение для стадии (4) торможения. Тонкости. (4.1) ищем такой угол a для
@@ -633,17 +639,17 @@
     (loop [l lander R (list)]
       (if-let [m (solve-descend l stage)]
         (case (:state m)
-          :done (list R)
+          :done (list (cons m R))
           :ok (recur (:lander m) (cons m R)))))))
 
 (defn- reverse-guide [^geometry.Stage stage ^Lander lander] (list))
 
-(defn model-control [guide ^Lander lander]
-  (letfn [(do-control [moves ^Lander l]
-            (when-first [{{ctl :control} :lander t :dt} moves]
-              (let [landers (take (+ 1 t) (iterate (partial move ctl 1.0) l))]
-                (cons landers
-                      (do-control (next moves) (last landers))))))]
+(letfn [(do-control [moves ^Lander l]
+          (when-first [{{ctl :control} :lander t :dt} moves]
+            (let [landers (take (+ 1 t) (iterate (partial move ctl 1.0) l))]
+              (cons landers
+                    (do-control (next moves) (last landers))))))]
+  (defn model-control [guide ^Lander lander]
     (do-control (mapcat reverse guide) lander)))
 
 (defn- along-guide-cloud [^Lander {{angle :angle power :power} :control :as lander}]

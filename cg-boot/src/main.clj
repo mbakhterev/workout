@@ -151,7 +151,7 @@
            (map (juxt type count) guide)
            (model-control guide L)
            (make-guide L S)
-           guide)) 
+           (map (partial map :dt) guide))) 
 
 (defn -main [& args]
   (reset-state)
