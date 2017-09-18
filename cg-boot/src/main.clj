@@ -1,6 +1,6 @@
 (ns main (:gen-class)
-         (:require [lander :refer :all]
-                   [geometry :refer :all]
+         (:require [lander :as l]
+                   [geometry :as g]
                    [render :as r]))
 
 (set! *warn-on-reflection* true)
@@ -9,7 +9,9 @@
 (defn- read-surface [] (let [N (read)] (doall (repeatedly (* 2 N) read))))
 (defn- read-lander [] (doall (repeatedly 7 read)))
 
-(defn- refine-guide [guide] (vec (apply concat (first guide) (map rest (rest guide)))))
+(comment (defn- refine-guide [guide] (vec (apply concat (first guide) (map rest (rest guide))))))
+
+(comment (defn- refine-guide [guide] (vec (apply concat guide))))
 
 (defn- sketch-landscape [^geometry.Landscape scape]
   (r/update-scene :surface (:raw-surface scape))
@@ -26,7 +28,7 @@
     (r/update-scene :stages nil)) 
 
   (defn- next-guide [g]
-    (swap! state (fn [st] (assoc st :guides (concat (:guides st) (filter (comp not empty?) g)))))) 
+    (swap! state (fn [st] (assoc st :guides (concat (:guides st) g))))) 
 
   (defn- next-trace [^lander.Lander l]
     (swap! state (fn [st] (assoc st :traces (conj (:traces st) [l])))))
@@ -59,7 +61,7 @@
     (swap! state (fn [st] (let [[prev curr :as traces] (unpack-traces (:traces st))]
                             (assert traces)
                             (assoc st :traces
-                                   (conj prev (conj curr (move control 1.0 ^Lander (last curr)))))))))
+                                   (conj prev (conj curr (l/move control 1.0 ^Lander (last curr)))))))))
   
   (defn- approximate-last []
     (let [[prev curr :as traces] (unpack-traces (:traces (deref state)))]
@@ -70,16 +72,27 @@
                  :vx (Math/round ^double (:vx l))
                  :vy (Math/round ^double (:vy l)))))))
 
-(defn- ^:dynamic make-guide [^lander.Lander {x :x vx :vx :as i-lander}
-                             ^geometry.Landscape scape]
-  (let [stages (detect-stages x vx scape)]
-    (next-stages stages)
-    (sketch-state)
-    (debugln :make-guide stages)
-    (let [guide (model-control (search-guide stages i-lander) i-lander)]
-      (next-guide guide)
-      (sketch-state)
-      (refine-guide guide))))
+(comment (defn- make-guide [^lander.Lander {x :x vx :vx :as i-lander}
+                            ^geometry.Landscape scape]
+           (let [stages (detect-stages x vx scape)]
+             (next-stages stages)
+             (sketch-state)
+             (l/debugln :make-guide stages)
+             (let [guide (model-control (l/search-guide stages i-lander) i-lander)]
+               (next-guide guide)
+               (sketch-state)
+               (refine-guide guide)))))
+
+(defn- make-guide [^lander.Lander {x :x vx :vx :as i-lander}
+                            ^geometry.Landscape scape]
+           (let [stages (g/detect-stages x vx scape)]
+             (next-stages stages)
+             (sketch-state)
+             (l/debugln :make-guide stages)
+             (let [guide (l/search-guide stages i-lander)]
+               (next-guide guide)
+               (sketch-state)
+               (l/refine-guide guide))))
 
 (def ^:private ^:const quanta 128)
 
@@ -105,12 +118,13 @@
 (defn- guide-loop [^lander.Lander lander guide]
   (next-trace lander)
   (loop [l lander steps 0]
-    (if-let [[delta control] (along-guide l guide)]
+    (if-let [[delta control] (l/along-guide l guide)]
       (if (> delta tolerable-drift)
         (do (dump "guide drift is too large. Correction is needed."
                   "delta:" delta
                   "steps:" steps
-                  "x:" (:x (approximate-last)))
+                  "x:" (:x (approximate-last))
+                  "lander:" l)
             l)
         (do (dump "delta is ok:" delta)
             (trace-move control)
@@ -137,30 +151,55 @@
                                   {:surface [0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800]
                                    :lander [6500 2800 -90 0 750 90 0]}])
 
-(comment (let [T (test-data 0)
-               S (build-landscape (:surface T))
-               L (form-lander (:lander T))
+(comment (let [T (test-data 1)
+               S (g/build-landscape (:surface T))
+               bad-lander #lander.Lander{:x 4774.0, :y 2521.0, :vx -60.0, :vy -4.0, :fuel 891, :control #lander.Control{:angle 0, :power 4}} 
+               L (if true bad-lander (l/form-lander (:lander T)))
                stages (detect-stages (:x L) (:vx L) S)
-               guide (search-guide stages L)]
+               guide (search-guide stages L)
+               control (model-control guide L)]
            (reset-state)
            (sketch-landscape S)
            (next-stages stages)
+           (next-guide control)
+           (sketch-state)
+           ; (r/update-scene :guide-traces control)
+           ; (r/update-scene :lander-traces (list (refine-guide control)))
+           ; (println (map type guide) \newline)
+           ; (println guide \newline)
+           ; (println control \newline)
+           ; (doseq [c control] (println (type c) (count c)))
+           ; (refine-guide control)
+           (make-guide L S)
+           (along-guide L (refine-guide control))
+           ; (map type (refine-guide control))
+           ; (second (refine-guide control))
+           ; (map type (refine-guide control))
+           ; (take 2 (refine-guide control))
+           ))  
+
+
+(comment (let [t (test-data 1)
+               s (g/build-landscape (:surface t))
+               l (form-lander (:lander t))
+               stages (detect-stages (:x l) (:vx l) s)
+               guide (search-guide stages l)]
+           (reset-state)
+           (sketch-landscape s)
+           (next-stages stages)
            (next-guide guide)
            (sketch-state)
-           (r/update-scene :guide-traces (filter (comp not empty?) (model-control guide L)))
-           (map (juxt type count) guide)
-           (model-control guide L)
-           (make-guide L S)
-           (map (partial map :dt) guide))) 
+           (map type guide)))
+
 
 (defn -main [& args]
   (reset-state)
   (let [T (test-data 1)
-        S (build-landscape (:surface T))
-        L (form-lander (:lander T))]
+        S (g/build-landscape (:surface T))
+        L (l/form-lander (:lander T))]
     (sketch-landscape S)
     (loop [l L]
-      (let [[lw g] (wait-loop S (->Control 0 4) l)]
+      (let [[lw g] (wait-loop S (l/->Control 0 4) l)]
         (dump "guide length:" (count g))
         (if-let [lg (guide-loop lw g)]
           (recur lg)
@@ -203,15 +242,15 @@
   (let [bad-l
         #lander.Lander{:x 1751.0, :y 2522.0, :vx 108.0, :vy -21.0, :fuel 774,
                        :control #lander.Control{:angle -5, :power 3}}
-        scape (build-landscape (:surface (test-data 0)))
-        stages (detect-stages bad-l scape)
+        scape (g/build-landscape (:surface (test-data 0)))
+        stages (g/detect-stages bad-l scape)
         guide (make-guide bad-l scape)]
     (map :stage stages)
-    (search-guide stages bad-l))) 
+    (l/search-guide stages bad-l))) 
 
 (defn bad-test-2 []
   (let [T (test-data 2)
-        L (form-lander (:lander T))
-        S (build-landscape (:surface T))
-        stages (detect-stages L S)]
+        L (l/form-lander (:lander T))
+        S (g/build-landscape (:surface T))
+        stages (g/detect-stages L S)]
     L))

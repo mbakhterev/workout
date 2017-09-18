@@ -4,14 +4,14 @@
 
 (defn debugln [flag & args]
   (let [flags (hash-set ; :hover-search
-                        ;  :search-guide
+                        ; :search-moves
                         ; :solve-hover
                         ; :brake-integrate
                         ; :solve-brake-4
                         ; :hover-guide
                         ; :hover-integrate
                         ; :solve-descend-one
-                        ; :along-guide
+                        :along-guide
                         ; :make-guide
                         )]
     (if (flags flag) (binding [*out* *err*] (apply println args)))))
@@ -243,24 +243,24 @@
 ;        (hover-stages l pad l-rock r-rock)
 ;        (reverse-stage l pad l-rock r-rock)))
 
-(declare hover-guide
-         brake-guide
-         descend-guide
-         reverse-guide)
+(declare hover-moves
+         brake-moves
+         descend-moves
+         reverse-moves)
 
-; Результатом search-guide должен быть список из списков шагов (Move) для каждой
+; Результатом search-moves должен быть список из списков шагов (Move) для каждой
 ; стадии. Списки шагов идут в обратном порядке, чтобы как можно быстрее
 ; вытаскивать последнее положение модуля на стадии (оно будет первым в списке и,
 ; вполне вероятно, быстро доступным). За это упорядочение отвечают нечтно-guide
 ; функции, которые передают эту обязанность в нечто-integrate функции.
 
-(defn search-guide [stages ^Lander lander]
+(defn- search-moves [stages ^Lander lander]
   (if-let [s (first stages)]
     (case (:stage s)
-      :reverse (do (debugln :search-guide "reverse") (reverse-guide s (rest stages) lander))  
-      :brake   (do (debugln :search-guide "brake") (brake-guide s (rest stages) lander))
-      :hover   (do (debugln :search-guide "hover") (hover-guide s (rest stages) lander))
-      :descend (do (debugln :search-guide "brake") (descend-guide s lander))
+      :reverse (do (debugln :search-guide "reverse") (reverse-moves s (rest stages) lander))  
+      :brake   (do (debugln :search-guide "brake") (brake-moves s (rest stages) lander))
+      :hover   (do (debugln :search-guide "hover") (hover-moves s (rest stages) lander))
+      :descend (do (debugln :search-guide "brake") (descend-moves s lander))
       :else    (assert false))))
 
 ; (defn- near-zero? [^double a] (> 1E-10 (Math/abs a)))
@@ -450,11 +450,11 @@
               (range a-right (- a-left 1) (- angle-delta))))]
   (->Control a p)))
 
-(defn- hover-guide [^geometry.Stage stage next-stages ^Lander lander]
+(defn- hover-moves [^geometry.Stage stage next-stages ^Lander lander]
   (if (hover-initial-ok? lander stage)
     (loop [cloud (keep (partial hover-integrate stage lander) (hover-control-cloud stage lander))]
       (when-first [moves cloud]
-        (if-let [m-next (search-guide next-stages (:lander (first moves)))]
+        (if-let [m-next (search-moves next-stages (:lander (first moves)))]
           (cons moves m-next)
           (recur (next cloud)))))))
 
@@ -569,13 +569,13 @@
       left-cloud
       right-cloud)))
 
-(defn- brake-guide [^geometry.Stage stage next-stages ^Lander lander]
+(defn- brake-moves [^geometry.Stage stage next-stages ^Lander lander]
   (if (brake-initial-ok? lander stage)
     (loop [cloud (keep (partial brake-integrate stage lander) (brake-control-cloud lander))]
       (when-first [moves cloud]
         (let [k (:lander (first moves))
               l (:lander (second moves))]
-          (if-let [m-next (search-guide next-stages (assoc l :control (:control k)))]
+          (if-let [m-next (search-moves next-stages (assoc l :control (:control k)))]
             (cons moves m-next)
             (recur (next cloud))))))))
 
@@ -634,7 +634,7 @@
           (if (< y-pad (+ (:y l) (:h dc)))
             (->Move :ok l t)))))))
 
-(defn- descend-guide [^geometry.Stage stage ^Lander lander]
+(defn- descend-moves [^geometry.Stage stage ^Lander lander]
   (if (brake-initial-ok? lander stage)
     (loop [l lander R (list)]
       (if-let [m (solve-descend l stage)]
@@ -642,15 +642,34 @@
           :done (list (cons m R))
           :ok (recur (:lander m) (cons m R)))))))
 
-(defn- reverse-guide [^geometry.Stage stage ^Lander lander] (list))
+(defn- reverse-moves [^geometry.Stage stage ^Lander lander] (list))
+
+(comment (letfn [(do-control [moves ^Lander l]
+                   (when-first [{{ctl :control} :lander t :dt} moves]
+                     (let [landers (take (+ 1 t) (iterate (partial move ctl 1.0) l))]
+                       (cons landers
+                             (do-control (next moves) (last landers))))))]
+           (defn model-control [guide ^Lander lander]
+             (do-control (mapcat reverse guide) lander))))
+
+; На каждый Move получаем список из Lander-ов, которые моделируют траекторию и
+; управление с шагом в 1 секунду. Все Move сгруппированы по стадиям в списки.
+; do-control сначала их собирает в плоский список, а потом каждый Move
+; превращает в список Lander-моделей с шагом в 1.0 по времени
 
 (letfn [(do-control [moves ^Lander l]
-          (when-first [{{ctl :control} :lander t :dt} moves]
-            (let [landers (take (+ 1 t) (iterate (partial move ctl 1.0) l))]
-              (cons landers
-                    (do-control (next moves) (last landers))))))]
-  (defn model-control [guide ^Lander lander]
-    (do-control (mapcat reverse guide) lander)))
+          (when-first [{{control :control} :lander t :dt} moves]
+            (if (zero? t)
+              (do-control (next moves) l)
+              (let [landers (take t (next (iterate (partial move control 1.0) l)))]
+                (cons landers 
+                      (do-control (next moves) (last landers)))))))]
+  (defn- model-guide [guide ^Lander lander]
+    (let [moves (do-control (mapcat reverse guide) lander)]
+      (when-first [m moves]
+        (cons (cons lander m) (next moves))))))
+
+(defn search-guide [stages ^Lander l] (model-guide (search-guide stages l) l))
 
 (defn- along-guide-cloud [^Lander {{angle :angle power :power} :control :as lander}]
   (for [p (range (max 0 (- power 1)) (min (+ power 1 1) 5))
@@ -675,8 +694,11 @@
                                [0 (diff-landers lander (nth guide 0))]
                                guide))]
       (debugln :along-guide "ig:" ig)
-      (if (> (- (count guide) 1) ig)
+      (when (> (- (count guide) 1) ig)
+        (debugln :along-guide "next:" (nth guide (+ 1 ig)))
         (let [target (nth guide (+ 1 ig))
               cloud (along-guide-cloud lander)
               [delta closest] (apply min-key first (map (juxt (partial diff-landers target) identity) cloud))]
           [delta (:control closest)])))))
+
+(defn refine-guide [guide] (vec (apply concat guide)))
