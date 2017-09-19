@@ -142,11 +142,17 @@
                S (make-landscape (:surface T))
                L (make-lander (:lander T))
                stages (make-stages (:x L) (:vx L) S)
-               guide (search-guide stages L)]
+               moves (search-moves stages L)
+               guide (search-guide stages L)
+               ]
            (reset-state)
-           (sketch-landscape S)
+
+           (sketch-landscape S) 
+           (next-stages stages)
+           (sketch-state)
+           (println (map :stage stages))
+
            guide
-           stages
            ))
 
 (defn -main [& args]

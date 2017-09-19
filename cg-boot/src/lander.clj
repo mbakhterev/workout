@@ -8,7 +8,7 @@
                         ; :solve-hover
                         ; :brake-integrate
                         ; :solve-brake-4
-                        ; :hover-guide
+                        ; :hover-search
                         ; :hover-integrate
                         ; :solve-descend-one
                         ; :along-guide
@@ -83,19 +83,15 @@
               (- fuel (* p t))
               c)))
 
-(defn move ^Lander [^Control c-target ^double t ^Lander {c-lander :control :as l}]
-  (let [c (control-to c-lander c-target)]
-    (assert (or (= 1.0 t) (= c c-target)))
-    (just-move c t l)))
+(defn move ^Lander [^Control c-target ^double t ^Lander {c :control :as l}]
+  (assert (or (= 1.0 t) (= c c-target)))
+  (let [c-next (control-to c c-target)] (just-move c-next t l)))
 
-; Проверки того, что модуль над поверхностью Марса
+; Проверки положения модуля
 
 (defn- in-range? [^Lander {x :x} ^geometry.Section s] (x-in-range? x s))
-
 (defn- over-line? [^Lander {x :x y :y} ^geometry.Section s] (point-over-line? s x y))
-
 (defn- over-section? [^Lander l ^geometry.Section s] (and (in-range? l s) (over-line? l s)))
-
 (defn- on-radar? [^Lander {x :x y :y}] (and (<= 0 x x-max) (<= 0 y y-max)))
 
 (defn alive? [surface ^Lander {x :x y :y :as l}]
@@ -121,14 +117,14 @@
 (defn- descend-constraint ^Constraint [^Lander {vy :vy}]
   (let [ay (y-acceleration 0 4)
         t  (time-to-speed ay vy (- max-final-vy))]
-    (if (Double/isFinite t)
+    (if-not (Double/isFinite t)
       (->Constraint 0.0 0.0 0.0)
       (->Constraint 0.0 (+ (* vy t) (* 0.5 ay ay t)) t))))
 
 (defn- brake-constraint ^Constraint [^Lander {vx :vx vy :vy} ^long direction]
-  (let [xi (* direction 90)
-        ay (y-acceleration xi 4)
-        ax (x-acceleration xi 4)
+  (let [φ  (* direction 90)
+        ay (y-acceleration φ 4)
+        ax (x-acceleration φ 4)
         t  (time-to-brake ax vx)]
     (if (<= 0.0 t)
       (->Constraint (+ (* vx t) (* 0.5 ax ax t)) 
@@ -156,13 +152,13 @@
 ; вполне вероятно, быстро доступным). За это упорядочение отвечают нечтно-guide
 ; функции, которые передают эту обязанность в нечто-integrate функции.
 
-(defn- search [stages ^Lander l]
+(defn search-moves [stages ^Lander l]
   (if-let [s (first stages)]
     (case (:stage s)
-      :reverse (do (debugln :search-guide "reverse") (reverse-search s (rest stages) l))  
-      :brake   (do (debugln :search-guide "brake") (brake-search s (rest stages) l))
-      :hover   (do (debugln :search-guide "hover") (hover-search s (rest stages) l))
-      :descend (do (debugln :search-guide "brake") (descend-search s l))
+      :reverse (do (debugln :search-moves "reverse") (reverse-search s (rest stages) l))  
+      :brake   (do (debugln :search-moves "brake") (brake-search s (rest stages) l))
+      :hover   (do (debugln :search-moves "hover") (hover-search s (rest stages) l))
+      :descend (do (debugln :search-moves "brake") (descend-search s l))
       :else    (assert false))))
 
 ; hover-align-control -- цикл выравнивания управления к заданному. Логика работы
@@ -218,19 +214,23 @@
 ; границу отрезка (такое теоретически может быть; возможно, это overkill).
 
 (defn- hover-steady-control ^Move [^Stage {xt :x-target :as stage}
-                                   ^Lander {x :x y :y vx :vx vy :vy c :control :as l}]
+                                   ^Lander {x :x y :y vx :vx vy :vy c :control :as lander}]
   (let [ax (x-acceleration c)
         t  (Math/ceil (time-to-intersect-1d ax vx x xt))]
     (if (and (Double/isFinite t)
-             (hover-alive? stage l c t))
-      (let [l  (just-move c t l)]
+             (hover-alive? stage lander c t))
+      (let [l (just-move c t lander)]
+        (debugln :hover-search "hsc. constraint" (constraint l stage))
         (if (constraint l stage) (->Move :ok l t))))))
 
-(defn- hover-integrate [^geometry.Stage stage ^Lander l-init ^Control c]
-  (let [{state :state l :lander :as m-align} (hover-align-control stage l-init c)]
+(defn- hover-integrate [^geometry.Stage stage ^Lander lander ^Control c]
+  (let [{state :state :as m-align} (hover-align-control stage lander c)]
+    (debugln :hover-search "hi. align state:" state)
     (case state
       :ko nil
-      :ok (if-let [m-steady (hover-steady-control stage l)] (list m-steady m-align))
+      :ok (let [m-steady (hover-steady-control stage (:lander m-align))]
+            (debugln :hover-search "hi. steady move:" m-steady)
+            (if m-steady (list m-steady m-align)))
       :out (list m-align))))
 
 ; Облако возможных управлений на стадии hover
@@ -249,8 +249,9 @@
 (defn- hover-search [^geometry.Stage stage next-stages ^Lander l]
   (if (hover-initial-ok? l stage)
     (loop [moves-cloud (keep (partial hover-integrate stage l) (hover-control-cloud stage l))]
+      (debugln :hover-search (count moves-cloud))
       (when-first [m moves-cloud]
-        (if-let [m-next (search next-stages (:lander (first m)))]
+        (if-let [m-next (search-moves next-stages (:lander (first m)))]
           (conj m-next m)
           (recur (next moves-cloud)))))))
 
@@ -336,7 +337,7 @@
       (when-first [m moves-cloud]
         (let [k (:lander (first m))
               l (:lander (second m))]
-          (if-let [m-next (search next-stages (assoc l :control (:control k)))]
+          (if-let [m-next (search-moves next-stages (assoc l :control (:control k)))]
             (conj m-next m)
             (recur (next moves-cloud))))))))
 
@@ -375,7 +376,7 @@
           (if (< y-pad (+ (:y l) (:h dc)))
             (->Move :ok l t)))))))
 
-(defn- descend-moves [^geometry.Stage stage ^Lander lander]
+(defn- descend-search [^geometry.Stage stage ^Lander lander]
   (if (brake-initial-ok? lander stage)
     (loop [l lander R (list)]
       (if-let [m (solve-descend l stage)]
@@ -402,7 +403,7 @@
       (when-first [t traces]
         (conj (next traces) (conj l t))))))
 
-(defn search-guide [stages ^Lander l] (model-guide (search stages l) l))
+(defn search-guide [stages ^Lander l] (model-guide (search-moves stages l) l))
 
 (defn- along-guide-cloud [^Lander {{angle :angle power :power} :control :as l}]
   (for [p (range (max 0 (- power 1)) (min (+ power 1 1) 5))
