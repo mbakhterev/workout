@@ -25,6 +25,8 @@
     (r/update-scene :traces nil)
     (r/update-scene :stages nil)) 
 
+  (defn state-guides [] (:guides (deref state)))
+
   (defn- next-guide [g]
     (swap! state (fn [st] (assoc st :guides (conj (:guides st) g))))) 
 
@@ -136,24 +138,30 @@
                                   {:surface [0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800]
                                    :lander [6500 2800 -90 0 750 90 0]}])
 
-(defn bad-test []
+(defn- bad-lander-extract []
   (let [T (test-data 1)
         S (g/make-landscape (:surface T))
         L (l/make-lander (:lander T))
-        stages (g/make-stages (:x L) (:vx L) S)
-        guide (l/search-guide stages L)
+        LP (:landing-pad S)
+        bad-lander (fn [^lander.Lander l] (< (:y l) (:ay LP)))
         ]
+    (main/-main)
+    (println "LP:" LP)
+    (let [bad-guides (filter (comp bad-lander last last) (keep identity (state-guides)))
+          the-worst (first (sort-by (comp :y last last) bad-guides))]
+      (r/update-scene :guides (list the-worst))
+      (first (first the-worst)))))
+
+(defn run-bad-case []
+  (let [T (test-data 1)
+        L (bad-lander-extract)
+        S (g/make-landscape (:surface T))
+        stages (g/make-stages (:x L) (:vx L) S)
+        guide (l/search-guide stages L)]
     (reset-state)
-
-    (sketch-landscape S) 
     (next-stages stages)
-    (sketch-state)
-    (println (map :stage stages))
-
-    guide
-    (make-guide L S)
-    ))
-
+    (next-guide guide)
+    (sketch-state)))
 
 (defn -main [& args]
   (reset-state)

@@ -120,7 +120,7 @@
         t  (g/time-to-speed ay vy (- max-final-vy))]
     (if (Double/isInfinite t)
       (->Constraint 0.0 0.0 0.0)
-      (->Constraint 0.0 (+ (* vy t) (* 0.5 ay ay t)) t))))
+      (->Constraint 0.0 (g/poly-2 (* 0.5 ay) vy 0 t) t))))
 
 (defn- brake-constraint ^Constraint [^Lander {vx :vx vy :vy} ^long direction]
   (let [φ  (* direction 90)
@@ -318,12 +318,12 @@
   (when-let [m-1 (brake-align-control l stage c)]
     (when-let [m-3 (brake-align-control (:lander m-1) stage (->Control 0 4))]
       (when-let [m-2 (solve-brake-2 (:lander m-3) c stage)]
-        (when-let [dc (descend-constraint (:lander m-2))]
-          (let [l (:lander m-2)
-                hr (+ (:y l) (reserve-dh (:h dc)))]
-            (if (and (< y-pad hr)
-                     (< (* 4.0 (:t dc)) (:fuel (:lander m-2))))
-              (list m-3 m-2 m-1))))))))
+        (let [l  (:lander m-2)
+              dc (descend-constraint l)
+              hr (+ (:y l) (reserve-dh (:h dc)))]
+          (if (and (< y-pad hr)
+                   (< (* 4.0 (:t dc)) (:fuel l)))
+            (list m-3 m-2 m-1)))))))
 
 ; По скорости можно определить какой диапазон ускорений следует рассматривать
 
