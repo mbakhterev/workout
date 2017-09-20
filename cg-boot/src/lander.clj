@@ -6,13 +6,12 @@
   (let [flags (hash-set ; :hover-search
                         ; :search-moves
                         ; :solve-hover
-                        ; :brake-integrate
-                        ; :solve-brake-4
+                        ; :brake-search
                         ; :hover-search
                         ; :hover-integrate
                         ; :solve-descend-one
                         ; :along-guide
-                        :make-guide
+                        ; :make-guide
                         ; :model-guide
                         )]
     (if (flags flag) (binding [*out* *err*] (apply println args)))))
@@ -266,8 +265,8 @@
 
 ; Стадии 1 и 3 рассчитываются циклом выравнивания управления.
 
-(defn- brake-initial-ok? [^Lander {y :y :as lander} ^geometry.Stage {section :section}]
-  (and (<= y g/y-max) (over-section? lander section)))
+(defn- brake-initial-ok? [^Lander {y :y :as lander} ^geometry.Stage {pad :section}]
+  (and (<= y g/y-max) (over-section? lander pad)))
 
 (defn- brake-alive? [^geometry.Stage {{ax-pad :ax y-pad :ay bx-pad :bx} :section}
                      ^Lander {x :x y :y vx :vx vy :vy}
@@ -298,8 +297,14 @@
 ; равна 0. (2.2) считаем, что должны хотя бы 0 секунд тормозить. Иначе, нам дали
 ; плохой контроль, и можно было бы потратить меньше топлива на остановку.
 
-(defn- solve-brake-2 ^Move [^Lander {vx :vx :as l}
-                            ^Control c
+(defn- speed-to-04 ^double [^Control control ^double vx]
+  (loop [v vx c control]
+    (if (= c (->Control 0 4))
+      v
+      (let [c-next (control-to c (->Control 0 4))]
+        (recur (+ v (x-acceleration c-next)) c-next)))))
+
+(defn- solve-brake-2 ^Move [^Lander {vx :vx c :control :as l}
                             ^geometry.Stage stage]
   (let [ax (x-acceleration c)]
     ; Если ускорение по x нулевое, то нет смысла тормозить с таким ускорением.
@@ -307,7 +312,7 @@
     ; для l контролем
     (if (zero? ax)
       (->Move :ok l 0.0)
-      (let [t-brake (Math/ceil (g/time-to-brake ax vx))]
+      (let [t-brake (Math/ceil (g/time-to-brake ax (speed-to-04 c vx)))]
         (if (and (Double/isFinite t-brake)
                  (brake-alive? stage l c t-brake))
           (->Move :ok (just-move c t-brake l) t-brake))))))
@@ -316,11 +321,13 @@
                         ^Lander l
                         ^Control c]
   (when-let [m-1 (brake-align-control l stage c)]
-    (when-let [m-3 (brake-align-control (:lander m-1) stage (->Control 0 4))]
-      (when-let [m-2 (solve-brake-2 (:lander m-3) c stage)]
-        (let [l  (:lander m-2)
+    (when-let [m-2 (solve-brake-2 (:lander m-1) stage)]
+      (when-let [m-3 (brake-align-control (:lander m-2) stage (->Control 0 4))]
+        (let [l  (:lander m-3)
               dc (descend-constraint l)
               hr (+ (:y l) (reserve-dh (:h dc)))]
+          (debugln :brake-search "constraint:" dc)
+          (doseq [m (list m-1 m-2 m-3)] (debugln :brake-search "move:" m))
           (if (and (< y-pad hr)
                    (< (* 4.0 (:t dc)) (:fuel l)))
             (list m-3 m-2 m-1)))))))
@@ -336,11 +343,9 @@
   (if (brake-initial-ok? l-init stage)
     (loop [moves-cloud (keep (partial brake-integrate stage l-init) (brake-control-cloud l-init))]
       (when-first [m moves-cloud]
-        (let [k (:lander (first m))
-              l (:lander (second m))]
-          (if-let [m-next (search-moves next-stages (assoc l :control (:control k)))]
-            (conj m-next m)
-            (recur (next moves-cloud))))))))
+        (if-let [m-next (search-moves next-stages (:lander (first m)))]
+          (conj m-next m)
+          (recur (next moves-cloud)))))))
 
 ; Решение для стадии (4) торможения. Тонкости. (4.1) ищем такой угол a для
 ; (контроль a 4), который позволит погасить остаточную скорость, оставаясь в

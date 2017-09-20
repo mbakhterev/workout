@@ -138,7 +138,21 @@
                                   {:surface [0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800]
                                    :lander [6500 2800 -90 0 750 90 0]}])
 
-(defn- bad-lander-extract []
+
+(defn -main [& args]
+  (reset-state)
+  (let [T (test-data 0)
+        S (g/make-landscape (:surface T))
+        L (l/make-lander (:lander T))]
+    (sketch-landscape S)
+    (loop [l L]
+      (let [[lw g] (wait-loop S (l/->Control 0 4) l)]
+        (dump "guide length:" (count g))
+        (if-let [lg (guide-loop lw g)]
+          (recur lg)
+          (approximate-last))))))
+
+(defn- extract-bad-lander []
   (let [T (test-data 1)
         S (g/make-landscape (:surface T))
         L (l/make-lander (:lander T))
@@ -152,26 +166,18 @@
       (r/update-scene :guides (list the-worst))
       (first (first the-worst)))))
 
+(def ^:const ^:private bad-lander (extract-bad-lander))
+
 (defn run-bad-case []
   (let [T (test-data 1)
-        L (bad-lander-extract)
+        L bad-lander 
         S (g/make-landscape (:surface T))
         stages (g/make-stages (:x L) (:vx L) S)
         guide (l/search-guide stages L)]
     (reset-state)
     (next-stages stages)
     (next-guide guide)
-    (sketch-state)))
-
-(defn -main [& args]
-  (reset-state)
-  (let [T (test-data 1)
-        S (g/make-landscape (:surface T))
-        L (l/make-lander (:lander T))]
-    (sketch-landscape S)
-    (loop [l L]
-      (let [[lw g] (wait-loop S (l/->Control 0 4) l)]
-        (dump "guide length:" (count g))
-        (if-let [lg (guide-loop lw g)]
-          (recur lg)
-          (approximate-last)))))) 
+    (sketch-state)
+    (println "LP:" (:landing-pad S))
+    (println "last stage:" (:stage (last stages)) "section:" (:section (last stages)))
+    ))
