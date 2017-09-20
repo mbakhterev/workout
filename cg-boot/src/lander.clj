@@ -400,7 +400,7 @@
           :done (list (conj R m))
           :ok (recur (:lander m) (conj R m)))))))
 
-(defn- reverse-moves [^geometry.Stage stage ^Lander lander] (list))
+(defn- reverse-search [^geometry.Stage stage next-stages ^Lander lander] (list))
 
 ; На каждый Move получаем список из Lander-ов, которые моделируют траекторию и
 ; управление с шагом в 1 секунду. Все Move сгруппированы по стадиям в списки.

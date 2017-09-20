@@ -116,3 +116,19 @@
     (sketch-state)
     (println "LP:" (:landing-pad S))
     (println "last stage:" (:stage (last stages)) "section:" (:section (last stages))))) 
+
+(defn bad-case []
+  (reset-state)
+  (let [L #lander.Lander{:x 4220.0, :y 1244.0,
+                         :vx 21.0, :vy -43.0, :fuel 611,
+                         :control #lander.Control{:angle 14, :power 4}}  
+        T (test-data 0)
+        S (g/make-landscape (:surface T))
+        stages (g/make-stages (:x L) (:vx L) S)
+        guide (l/search-guide stages L)]
+        (sketch-landscape S)
+        (next-stages stages)
+        (next-trace L)
+        (next-guide guide) 
+        (sketch-state)
+        guide))

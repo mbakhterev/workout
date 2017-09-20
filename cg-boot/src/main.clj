@@ -145,12 +145,14 @@
                                              6000 500 6500 300 6999 500]
                                    :lander [6500 2700 -50 0 1000 90 0]}
                                   
-                                  {:surface [0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800]
+                                  {:surface [0 100 1000 500 1500 1500
+                                             3000 1000 4000 150 5500 150
+                                             6999 800]
                                    :lander [6500 2800 -90 0 750 90 0]}])
 
 (defn -main [& args]
   (reset-state)
-  (let [T (test-data 0)
+  (let [T (test-data 2)
         S (g/make-landscape (:surface T))
         L (l/make-lander (:lander T))]
     (sketch-landscape S)
@@ -161,18 +163,4 @@
           (recur lg g)
           (approximate-last))))))
 
-(defn bad-case []
-  (reset-state)
-  (let [L #lander.Lander{:x 4220.0, :y 1244.0,
-                         :vx 21.0, :vy -43.0, :fuel 611,
-                         :control #lander.Control{:angle 14, :power 4}}  
-        T (test-data 0)
-        S (g/make-landscape (:surface T))
-        stages (g/make-stages (:x L) (:vx L) S)
-        guide (l/search-guide stages L)]
-        (sketch-landscape S)
-        (next-stages stages)
-        (next-trace L)
-        (next-guide guide) 
-        (sketch-state)
-        guide))
+
