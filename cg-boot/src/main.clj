@@ -83,24 +83,36 @@
 
 (def ^:private ^:const quanta 128)
 
+(defn- routine [^lander.Lander l ^lander.Control control guide]
+  (when-let [[δ c] (if guide (l/along-guide l guide) [0.0 control])]
+    (trace-move c)
+    (approximate-last)))
+
+(defn- done-it [what ^lander.Lander l]
+  (dump (str what " is DONE.") "Last lander:" l)
+  (sketch-state)
+  nil)
+
 (defn- wait-loop [^geometry.Landscape scape
                   ^lander.Control control
-                  ^lander.Lander lander]
+                  ^lander.Lander lander
+                  previous-guide]
   (next-trace lander)
   (loop [l lander G (future (make-guide lander scape)) steps 0]
     (if-let [g (deref G quanta nil)] 
       (do (dump "guide computation is DONE." "steps:" steps "guide length:" (count g))
           (if (empty? g)
             (do (dump "guide computation is FAILED. Continuing with routine")
-                (trace-move control)
-                (let [tl (approximate-last)]
-                  (recur tl (future (make-guide tl scape)) 0)))
+                (if-let [tl (routine l control previous-guide)]
+                  (recur tl (future (make-guide tl scape)) 0)
+                  (done-it "routine" l)))
             [l g]))
-      (do (dump "waiting for guide with control:" control)
-          (trace-move control)
-          (recur (approximate-last) G (+ 1 steps))))))
+      (do (dump "waiting for guide with routine")
+          (if-let [tl (routine l control previous-guide)]
+            (recur tl G (+ 1 steps))
+            (done-it "routine" l))))))
 
-(def ^:private ^:const tolerable-drift (* 8.0 8.0))
+(def ^:private ^:const tolerable-drift (* 4.0 4.0))
 
 (defn- guide-loop [^lander.Lander lander guide]
   (next-trace lander)
@@ -116,9 +128,7 @@
         (do (dump "delta is ok:" delta)
             (trace-move control)
             (recur (approximate-last) (+ 1 steps))))
-      (do (dump "guide following is DONE")
-          (sketch-state)
-          nil))))
+      (done-it "guide following" l))))
 
 ; Тестовые данные
 (def ^:private ^:const test-data [{:surface [0 1000 300 1500 350 1400 500 2000
@@ -144,11 +154,11 @@
         S (g/make-landscape (:surface T))
         L (l/make-lander (:lander T))]
     (sketch-landscape S)
-    (loop [l L]
-      (let [[lw g] (wait-loop S (l/->Control 0 4) l)]
+    (loop [l L g-prev nil]
+      (when-let [[lw g] (wait-loop S (l/->Control 0 4) l g-prev)]
         (dump "guide length:" (count g))
         (if-let [lg (guide-loop lw g)]
-          (recur lg)
+          (recur lg g)
           (approximate-last))))))
 
 (defn bad-case []
