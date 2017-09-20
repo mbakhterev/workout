@@ -112,14 +112,14 @@
 ; не нужна высота и время на сжигание топлива.
 
 (def ^:const ^:private max-final-vy 38.0)
-(def ^:const ^:private max-final-vx 20.0)
+(def ^:const ^:private max-final-vx 18.0)
 
 (defn- descend-constraint ^Constraint [^Lander {vy :vy}]
   (let [ay (y-acceleration 0 4)
         t  (g/time-to-speed ay vy (- max-final-vy))]
     (if (Double/isInfinite t)
       (->Constraint 0.0 0.0 0.0)
-      (->Constraint 0.0 (g/poly-2 (* 0.5 ay) vy 0 t) t))))
+      (->Constraint 0.0 (g/poly-2 (* 0.5 ay) vy 0.0 t) t))))
 
 (defn- brake-constraint ^Constraint [^Lander {vx :vx vy :vy} ^long direction]
   (let [φ  (* direction 90)
@@ -305,14 +305,17 @@
         (recur (+ v (x-acceleration c-next)) c-next)))))
 
 (defn- solve-brake-2 ^Move [^Lander {vx :vx c :control :as l}
-                            ^geometry.Stage stage]
-  (let [ax (x-acceleration c)]
+                            ^geometry.Stage {:as stage}]
+  (let [ax (x-acceleration c)
+        v-drop (speed-to-04 c vx)]
     ; Если ускорение по x нулевое, то нет смысла тормозить с таким ускорением.
-    ; Но полёт при этом нормальный, поэтому просто возвращаем l. С текущим
-    ; для l контролем
-    (if (zero? ax)
+    ; Если остаточная скорость v-drop меньше нуля вдоль направления торможения, то
+    ; тормозить тоже нет смысла. Считаем, что в этих случаях полёт нормальный,
+    ; возвращаем l с текущим контролем
+    (if (or (zero? ax)
+            (neg? (* vx v-drop)))
       (->Move :ok l 0.0)
-      (let [t-brake (Math/ceil (g/time-to-brake ax (speed-to-04 c vx)))]
+      (let [t-brake (Math/ceil (g/time-to-brake ax v-drop))]
         (if (and (Double/isFinite t-brake)
                  (brake-alive? stage l c t-brake))
           (->Move :ok (just-move c t-brake l) t-brake))))))
@@ -320,28 +323,35 @@
 (defn- brake-integrate [^geometry.Stage {y-pad :y-pad :as stage} 
                         ^Lander l
                         ^Control c]
+  (debugln :brake-search \newline)
+  (debugln :brake-search "y-pad:" y-pad "control:" c "ax:" (x-acceleration c))
   (when-let [m-1 (brake-align-control l stage c)]
+    (debugln :brake-search "m-1:" m-1)
     (when-let [m-2 (solve-brake-2 (:lander m-1) stage)]
+      (debugln :brake-search "m-2" m-2)
       (when-let [m-3 (brake-align-control (:lander m-2) stage (->Control 0 4))]
+        (debugln :brake-search "m-3" m-3)
         (let [l  (:lander m-3)
               dc (descend-constraint l)
               hr (+ (:y l) (reserve-dh (:h dc)))]
           (debugln :brake-search "constraint:" dc)
-          (doseq [m (list m-1 m-2 m-3)] (debugln :brake-search "move:" m))
-          (if (and (< y-pad hr)
-                   (< (* 4.0 (:t dc)) (:fuel l)))
+          (when (and (< y-pad hr)
+                     (< (* 4.0 (:t dc)) (:fuel l)))
+            (debugln :brake-search "FOUND ONE")
             (list m-3 m-2 m-1)))))))
 
 ; По скорости можно определить какой диапазон ускорений следует рассматривать
 
-(let [l-cloud (vec (for [p (range 1 5) a (range 0 91 angle-delta)] (->Control a p)))
-      r-cloud (vec (for [p (range 1 5) a (range -90 1 angle-delta)] (->Control a p)))]
+(let [l-cloud (vec (for [p (range 3 5) a (range 0 91 5)] (->Control a p)))
+      r-cloud (vec (for [p (range 3 5) a (range -90 1 5)] (->Control a p)))]
   (defn- brake-control-cloud [^Lander {vx :vx}]
     (if (>= vx 0.0) l-cloud r-cloud)))
 
 (defn- brake-search [^geometry.Stage stage next-stages ^Lander l-init]
   (if (brake-initial-ok? l-init stage)
     (loop [moves-cloud (keep (partial brake-integrate stage l-init) (brake-control-cloud l-init))]
+      (debugln :brake-search (count moves-cloud))
+      (debugln :brake-search (first moves-cloud))
       (when-first [m moves-cloud]
         (if-let [m-next (search-moves next-stages (:lander (first m)))]
           (conj m-next m)

@@ -87,3 +87,32 @@
         S (g/landscape (:surface T))
         stages (g/detect-stages L S)]
     L))
+
+(defn- extract-bad-lander []
+  (let [T (test-data 1)
+        S (g/make-landscape (:surface T))
+        L (l/make-lander (:lander T))
+        LP (:landing-pad S)
+        bad-lander (fn [^lander.Lander l] (< (:y l) (:ay LP)))
+        ]
+    (main/-main)
+    (println "LP:" LP)
+    (let [bad-guides (filter (comp bad-lander last last) (keep identity (state-guides)))
+          the-worst (first (sort-by (comp :y last last) bad-guides))]
+      (r/update-scene :guides (list the-worst))
+      (first (first the-worst)))))
+
+(def ^:const ^:private bad-lander (extract-bad-lander))
+
+(defn run-bad-case []
+  (let [T (test-data 1)
+        L bad-lander 
+        S (g/make-landscape (:surface T))
+        stages (g/make-stages (:x L) (:vx L) S)
+        guide (l/search-guide stages L)]
+    (reset-state)
+    (next-stages stages)
+    (next-guide guide)
+    (sketch-state)
+    (println "LP:" (:landing-pad S))
+    (println "last stage:" (:stage (last stages)) "section:" (:section (last stages))))) 

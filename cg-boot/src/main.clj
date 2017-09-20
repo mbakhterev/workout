@@ -100,7 +100,7 @@
           (trace-move control)
           (recur (approximate-last) G (+ 1 steps))))))
 
-(def ^:private ^:const tolerable-drift (* 4.0 4.0))
+(def ^:private ^:const tolerable-drift (* 8.0 8.0))
 
 (defn- guide-loop [^lander.Lander lander guide]
   (next-trace lander)
@@ -110,8 +110,8 @@
         (do (dump "guide drift is too large. Correction is needed."
                   "delta:" delta
                   "steps:" steps
-                  "x:" (:x (approximate-last))
-                  "lander:" l)
+                  "x:" (:x (approximate-last)))
+            (dump "lander:" l)
             l)
         (do (dump "delta is ok:" delta)
             (trace-move control)
@@ -138,7 +138,6 @@
                                   {:surface [0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800]
                                    :lander [6500 2800 -90 0 750 90 0]}])
 
-
 (defn -main [& args]
   (reset-state)
   (let [T (test-data 0)
@@ -152,32 +151,18 @@
           (recur lg)
           (approximate-last))))))
 
-(defn- extract-bad-lander []
-  (let [T (test-data 1)
-        S (g/make-landscape (:surface T))
-        L (l/make-lander (:lander T))
-        LP (:landing-pad S)
-        bad-lander (fn [^lander.Lander l] (< (:y l) (:ay LP)))
-        ]
-    (main/-main)
-    (println "LP:" LP)
-    (let [bad-guides (filter (comp bad-lander last last) (keep identity (state-guides)))
-          the-worst (first (sort-by (comp :y last last) bad-guides))]
-      (r/update-scene :guides (list the-worst))
-      (first (first the-worst)))))
-
-(def ^:const ^:private bad-lander (extract-bad-lander))
-
-(defn run-bad-case []
-  (let [T (test-data 1)
-        L bad-lander 
+(defn bad-case []
+  (reset-state)
+  (let [L #lander.Lander{:x 4220.0, :y 1244.0,
+                         :vx 21.0, :vy -43.0, :fuel 611,
+                         :control #lander.Control{:angle 14, :power 4}}  
+        T (test-data 0)
         S (g/make-landscape (:surface T))
         stages (g/make-stages (:x L) (:vx L) S)
         guide (l/search-guide stages L)]
-    (reset-state)
-    (next-stages stages)
-    (next-guide guide)
-    (sketch-state)
-    (println "LP:" (:landing-pad S))
-    (println "last stage:" (:stage (last stages)) "section:" (:section (last stages)))
-    ))
+        (sketch-landscape S)
+        (next-stages stages)
+        (next-trace L)
+        (next-guide guide) 
+        (sketch-state)
+        guide))

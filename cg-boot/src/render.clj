@@ -68,7 +68,8 @@
                            :landing-pad (invert-y-section (scale-section value))
                            :stages (if value (keep reshape-stage value))  
                            :guides (keep reshape-trace value)
-                           :traces (reshape-trace value))
+                           :traces (if (not (empty? value))
+                                     (reshape-trace (filter (comp not empty?) (conj (map next (next value)) (first value))))))
                      :redraw true)
   true)
 
