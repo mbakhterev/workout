@@ -12,7 +12,8 @@
                         ; :hover-integrate
                         ; :solve-descend-one
                         ; :along-guide
-                        ; :make-guide
+                        :make-guide
+                        ; :model-guide
                         )]
     (if (flags flag) (binding [*out* *err*] (apply println args)))))
 
@@ -392,16 +393,19 @@
 ; превращает в список Lander-моделей с шагом в 1.0 по времени
 
 (letfn [(trace-moves [moves ^Lander l]
+          (debugln :model-guide moves)
           (when-first [{{c :control} :lander t :dt} moves]
             (if (zero? t)
               (trace-moves (next moves) l)
-              (let [trace (take t (next (iterate (partial move t 1.0) l)))]
+              (let [trace (take t (next (iterate (partial move c 1.0) l)))]
                 (conj (trace-moves (next moves) (last trace))
                       trace)))))]
-  (defn- model-guide [moves ^Lander l]
+  (defn model-guide [moves ^Lander l]
     (let [traces (trace-moves (mapcat reverse moves) l)]
+      (debugln :model-guide "trace count:" (count traces) (reduce + (map count moves)))
       (when-first [t traces]
-        (conj (next traces) (conj l t))))))
+        (debugln :model-guide "first trace:" t)
+        (conj (next traces) (conj t l))))))
 
 (defn search-guide [stages ^Lander l] (model-guide (search-moves stages l) l))
 

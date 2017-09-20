@@ -70,13 +70,13 @@
                  :vx (Math/round ^double (:vx l))
                  :vy (Math/round ^double (:vy l)))))))
 
-(defn- make-guide [^lander.Lander {x :x vx :vx :as l-init}
+(defn- make-guide [^lander.Lander {x :x vx :vx :as l}
                    ^geometry.Landscape scape]
   (let [stages (make-stages x vx scape)]
     (next-stages stages)
     (sketch-state)
     (debugln :make-guide stages)
-    (let [guide (search-guide stages l-init)]
+    (let [guide (search-guide stages l)]
       (next-guide guide)
       (sketch-state)
       (flatten-guide guide))))
@@ -138,22 +138,25 @@
                                   {:surface [0 100 1000 500 1500 1500 3000 1000 4000 150 5500 150 6999 800]
                                    :lander [6500 2800 -90 0 750 90 0]}])
 
-(comment (let [T (test-data 1)
-               S (make-landscape (:surface T))
-               L (make-lander (:lander T))
-               stages (make-stages (:x L) (:vx L) S)
-               moves (search-moves stages L)
-               guide (search-guide stages L)
-               ]
-           (reset-state)
+(defn bad-test []
+  (let [T (test-data 1)
+        S (make-landscape (:surface T))
+        L (make-lander (:lander T))
+        stages (make-stages (:x L) (:vx L) S)
+        moves (search-moves stages L)
+        guide (search-guide stages L)
+        ]
+    (reset-state)
 
-           (sketch-landscape S) 
-           (next-stages stages)
-           (sketch-state)
-           (println (map :stage stages))
+    (sketch-landscape S) 
+    (next-stages stages)
+    (sketch-state)
+    (println (map :stage stages))
 
-           guide
-           ))
+    guide
+    (make-guide L S)
+    ))
+
 
 (defn -main [& args]
   (reset-state)
