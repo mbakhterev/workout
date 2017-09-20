@@ -1,4 +1,4 @@
-(ns lander (:require [geometry :refer :all]))
+(ns lander (:require [geometry :as g]))
 
 (set! *warn-on-reflection* true)
 
@@ -53,7 +53,7 @@
       sin (fn [a] (Math/sin (Math/toRadians (+ 90 a))))
       x-force (fn ^double [a p] (* p (cos a)))
       y-force (fn ^double [a p] (- (* p (sin a)) M))
-      to-zero (fn ^double [^double a] (if (non-zero? a) a 0.0))
+      to-zero (fn ^double [^double a] (if (g/non-zero? a) a 0.0))
 
       make-table (fn [f] (vec (for [p (range 0 5)]
                                 (vec (for [a (range -90 91)]
@@ -77,8 +77,8 @@
                           ^Lander {x :x y :y vx :vx vy :vy fuel :fuel}]
   (let [ax (x-acceleration a p)
         ay (y-acceleration a p)]
-    (->Lander (poly-2 (* 0.5 ax) vx x t)
-              (poly-2 (* 0.5 ay) vy y t)
+    (->Lander (g/poly-2 (* 0.5 ax) vx x t)
+              (g/poly-2 (* 0.5 ay) vy y t)
               (+ vx (* ax t))
               (+ vy (* ay t))
               (- fuel (* p t))
@@ -90,10 +90,10 @@
 
 ; Проверки положения модуля
 
-(defn- in-range? [^Lander {x :x} ^geometry.Section s] (x-in-range? x s))
-(defn- over-line? [^Lander {x :x y :y} ^geometry.Section s] (point-over-line? s x y))
+(defn- in-range? [^Lander {x :x} ^geometry.Section s] (g/in-range? x s))
+(defn- over-line? [^Lander {x :x y :y} ^geometry.Section s] (g/over-line? s x y))
 (defn- over-section? [^Lander l ^geometry.Section s] (and (in-range? l s) (over-line? l s)))
-(defn- on-radar? [^Lander {x :x y :y}] (and (<= 0 x x-max) (<= 0 y y-max)))
+(defn- on-radar? [^Lander {x :x y :y}] (and (<= 0 x g/x-max) (<= 0 y g/y-max)))
 
 (defn alive? [surface ^Lander {x :x y :y :as l}]
   (and (on-radar? l)
@@ -117,8 +117,8 @@
 
 (defn- descend-constraint ^Constraint [^Lander {vy :vy}]
   (let [ay (y-acceleration 0 4)
-        t  (time-to-speed ay vy (- max-final-vy))]
-    (if-not (Double/isFinite t)
+        t  (g/time-to-speed ay vy (- max-final-vy))]
+    (if (Double/isInfinite t)
       (->Constraint 0.0 0.0 0.0)
       (->Constraint 0.0 (+ (* vy t) (* 0.5 ay ay t)) t))))
 
@@ -126,7 +126,7 @@
   (let [φ  (* direction 90)
         ay (y-acceleration φ 4)
         ax (x-acceleration φ 4)
-        t  (time-to-brake ax vx)]
+        t  (g/time-to-brake ax vx)]
     (if (<= 0.0 t)
       (->Constraint (+ (* vx t) (* 0.5 ax ax t)) 
                     (+ (* vy t) (* 0.5 ay ay t))
@@ -153,7 +153,7 @@
 ; вполне вероятно, быстро доступным). За это упорядочение отвечают нечтно-guide
 ; функции, которые передают эту обязанность в нечто-integrate функции.
 
-(defn search-moves [stages ^Lander l]
+(defn- search-moves [stages ^Lander l]
   (if-let [s (first stages)]
     (case (:stage s)
       :reverse (do (debugln :search-moves "reverse") (reverse-search s (rest stages) l))  
@@ -173,7 +173,7 @@
 ; исходный lander корректный для пролёта над секцией.
 
 (defn- hover-initial-ok? [^Lander {y :y :as l} ^geometry.Stage {s :section}]
-  (and (<= y y-max) (over-section? l s)))
+  (and (<= y g/y-max) (over-section? l s)))
 
 ; Проверка на допустимость движения под заданным управлением. Критерий: модуль
 ; не должен пересечь ни одну из ограничивающих стадию линий. Тонкость в том, что
@@ -190,14 +190,14 @@
                      ^double dt]
   (let [ax (x-acceleration a p)
         ay (y-acceleration a p)
-        x-next (poly-2 (* 0.5 ax) vx x dt)
-        y-next (poly-2 (* 0.5 ay) vy y dt)]
-    (and (< dt (time-to-intersect-2d [ax vx x] [ay vy y] s))
-         (or (non-zero? (normal-projection s x-next y-next)) (point-over-line? s x y))
-         (< dt (time-to-intersect-1d ay vy y y-max))
-         (or (non-zero? (- y y-max)) (<= y-next y-max))
-         (< dt (time-to-intersect-1d ax vx x ox))
-         (or (non-zero? (- x ox)) (pos? (* dir (- x-next ox)))))))
+        x-next (g/poly-2 (* 0.5 ax) vx x dt)
+        y-next (g/poly-2 (* 0.5 ay) vy y dt)]
+    (and (< dt (g/time-to-intersect-2d [ax vx x] [ay vy y] s))
+         (or (g/non-zero? (g/normal-projection s x-next y-next)) (g/over-line? s x y))
+         (< dt (g/time-to-intersect-1d ay vy y g/y-max))
+         (or (g/non-zero? (- y g/y-max)) (<= y-next g/y-max))
+         (< dt (g/time-to-intersect-1d ax vx x ox))
+         (or (g/non-zero? (- x ox)) (pos? (* dir (- x-next ox)))))))
 
 (defn- hover-align-control ^Move [^geometry.Stage {xt :x-target dir :direction :as stage}
                                   ^Lander l-init
@@ -217,7 +217,7 @@
 (defn- hover-steady-control ^Move [^Stage {xt :x-target :as stage}
                                    ^Lander {x :x y :y vx :vx vy :vy c :control :as lander}]
   (let [ax (x-acceleration c)
-        t  (Math/ceil (time-to-intersect-1d ax vx x xt))]
+        t  (Math/ceil (g/time-to-intersect-1d ax vx x xt))]
     (if (and (Double/isFinite t)
              (hover-alive? stage lander c t))
       (let [l (just-move c t lander)]
@@ -267,7 +267,7 @@
 ; Стадии 1 и 3 рассчитываются циклом выравнивания управления.
 
 (defn- brake-initial-ok? [^Lander {y :y :as lander} ^geometry.Stage {section :section}]
-  (and (<= y y-max) (over-section? lander section)))
+  (and (<= y g/y-max) (over-section? lander section)))
 
 (defn- brake-alive? [^geometry.Stage {{ax-pad :ax y-pad :ay bx-pad :bx} :section}
                      ^Lander {x :x y :y vx :vx vy :vy}
@@ -275,16 +275,16 @@
                      ^double dt]
   (let [ax (x-acceleration a p)
         ay (y-acceleration a p)
-        x-next (poly-2 (* 0.5 ax) vx x dt)
-        y-next (poly-2 (* 0.5 ay) vy y dt)]
-    (and (< dt (time-to-intersect-1d ax vx x ax-pad))
-         (or (non-zero? (- x ax-pad)) (>= x-next ax-pad))
-         (< dt (time-to-intersect-1d ax vx x bx-pad))
-         (or (non-zero? (- x bx-pad)) (<= x-next bx-pad))
-         (< dt (time-to-intersect-1d ay vy y y-max))
-         (or (non-zero? (- y y-max)) (<= y-next y-max))
-         (< dt (time-to-intersect-1d ay vy y y-pad))
-         (or (non-zero? (- y y-pad)) (<= y-pad y)))))
+        x-next (g/poly-2 (* 0.5 ax) vx x dt)
+        y-next (g/poly-2 (* 0.5 ay) vy y dt)]
+    (and (< dt (g/time-to-intersect-1d ax vx x ax-pad))
+         (or (g/non-zero? (- x ax-pad)) (>= x-next ax-pad))
+         (< dt (g/time-to-intersect-1d ax vx x bx-pad))
+         (or (g/non-zero? (- x bx-pad)) (<= x-next bx-pad))
+         (< dt (g/time-to-intersect-1d ay vy y g/y-max))
+         (or (g/non-zero? (- y g/y-max)) (<= y-next g/y-max))
+         (< dt (g/time-to-intersect-1d ay vy y y-pad))
+         (or (g/non-zero? (- y y-pad)) (<= y-pad y)))))
 
 (defn- brake-align-control ^Move [^Lander l-init ^geometry.Stage stage ^Control c-target]
   (loop [{c :control :as l} l-init t 0.0]
@@ -307,7 +307,7 @@
     ; для l контролем
     (if (zero? ax)
       (->Move :ok l 0.0)
-      (let [t-brake (Math/ceil (time-to-brake ax vx))]
+      (let [t-brake (Math/ceil (g/time-to-brake ax vx))]
         (if (and (Double/isFinite t-brake)
                  (brake-alive? stage l c t-brake))
           (->Move :ok (just-move c t-brake l) t-brake))))))
@@ -356,7 +356,7 @@
 (let [vy-average -20.0]
   (defn- quite-slow? [^Lander {x :x vx :vx y :y :as l}
                       ^geometry.Stage {pad :section}]
-    (or (near-zero? vx)
+    (or (g/near-zero? vx)
         (let [x-pad (if (pos? vx) (:bx pad) (:ax pad))
               t-out (/ (- x-pad x) vx)
               t-drop (Math/ceil (/ (- (:ay pad) y) vy-average))]

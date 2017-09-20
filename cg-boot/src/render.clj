@@ -7,7 +7,7 @@
 (def ^:private ^:const space-width 7000)
 (def ^:private ^:const space-height 3000) 
 
-(def ^:private ^:const display-width (- 1600 32))
+(def ^:private ^:const display-width (- 1920 32))
 (def ^:private ^:const display-height (long (* display-width (/ space-height space-width))))
 
 (def ^:private ^:const factor-x (float (/ display-height space-height)))
@@ -26,16 +26,16 @@
 
 (defn- invert-y [^double y] (- display-height y))
 
-(defn- correct-y-section [s]
+(defn- invert-y-section [s]
   (g/->Section (:ax s) (invert-y (:ay s))
                (:bx s) (invert-y (:by s))
                (:nx s)
                (:ny s)))
 
-(defn- correct-surface [sections]
-  (map (comp correct-y-section scale-section) sections))
+(defn- reshape-surface [sections]
+  (map (comp invert-y-section scale-section) sections))
 
-(defn- correct-lander [l]
+(defn- reshape-lander [l]
   (l/->Lander (* factor-x (:x l))
               (invert-y (* factor-y (:y l)))
               (* factor-x (:vx l))
@@ -43,58 +43,60 @@
               (:fuel l)
               (:control l)))
 
-(defn- correct-trace [full-mark? L]
+(defn- reshape-trace-chunk [full-mark? L]
+  (assert (not (empty? L)))
   (let [l (last L)]
-    {:trace (map correct-lander L)
+    {:trace (map reshape-lander L)
      :mark  (let [m (format "%d|%d" (:angle (:control l)) (:power (:control l)))]
               (str (if full-mark? (format "%d|%.3f|%.3f|" (:fuel l) (:vx l) (:vy l))) m))}))
 
-(defn- correct-stage [^geometry.Stage s]
+(defn- reshape-trace [trace]
+  (if (not (empty? trace))
+    (concat (map (partial reshape-trace-chunk false) (drop-last trace))
+            (list (reshape-trace-chunk true (last trace))))))
+
+(defn- reshape-stage [^geometry.Stage s]
   (if (#{:hover :brake :reverse} (:stage s))
     {:target (* factor-x (:x-target s))
      :mark (str (:stage s) (if (pos? (:direction s)) " left" " right"))
      :left? (pos? (:direction s))}))
 
-(defn- update-traces [traces]
-  (concat (map (partial correct-trace false) (drop-last traces))
-          (list (correct-trace true (last traces)))))
-
 (defn update-scene [tag value]
   (swap! scene assoc tag (case tag
-                           :surface (correct-surface value)
-                           :shell (correct-surface value)
-                           :landing-pad (correct-y-section (scale-section value))
-                           :guides (if (not (empty? value)) (update-traces value))
-                           :traces (if (not (empty? value)) (update-traces value))
-                           :stages (if value (keep correct-stage value)))
+                           :surface (reshape-surface value)
+                           :shell (reshape-surface value)
+                           :landing-pad (invert-y-section (scale-section value))
+                           :stages (if value (keep reshape-stage value))  
+                           :guides (keep reshape-trace value)
+                           :traces (reshape-trace value))
                      :redraw true)
   true)
 
-(defn- draw-lander [^lander.Lander l color ^long r]
-  (let [c  (:control l)
-        x  (:x l)
-        y  (:y l)
-        vx (:vx l)
-        vy (:vy l)
-        ax (* (:power c) (Math/sin (Math/toRadians (+ 0 (:angle c)))))
+(defn- draw-lander [^lander.Lander {x :x y :y vx :vx vy :vy c :control} color ^long r]
+  (let [ax (* (:power c) (Math/sin (Math/toRadians (+ 0 (:angle c)))))
         ay (* (:power c) (Math/cos (Math/toRadians (+ 0 (:angle c)))))]
-    (q/no-stroke)
-    (q/fill 0)
-    (q/ellipse (:x l) (:y l) r r)
     (apply q/stroke color)
     (q/line x y (+ x (* 4 ax)) (+ y (* 4 ay)))
     (apply q/stroke color)
-    (q/line x y (+ x vx) (+ y vy)))) 
+    (q/line x y (+ x vx) (+ y vy))     
+    (if (pos? r)
+      (do (q/no-stroke)
+          (q/fill 0)
+          (q/ellipse x y r r))
+      (do (q/stroke 0)
+          (q/fill 255)
+          (q/ellipse x y r r)))))
 
-(defn- draw-traces [traces color]
-  (doseq [t traces]
-    (when (not (empty? t))
-      (doseq [l (drop-last (:trace t))] (draw-lander l color 4))
-      (let [l (last (:trace t))
-            m (:mark t)
-            text-width (q/text-width m)]
-        (draw-lander l color 6)
-        (q/text m (- (:x l) 5 text-width) (+ (:y l) 10))))))
+(defn- draw-trace [color trace]
+  (doseq [t trace]
+    (assert (not (empty? t)))
+    (doseq [l (drop-last (:trace t))] (draw-lander l color 4))
+    (let [l (last (:trace t))
+          m (:mark t)
+          text-width (q/text-width m)]
+      (draw-lander l color -4)
+      (q/fill 0)
+      (q/text m (- (:x l) 5 text-width) (+ (:y l) 10)))))
 
 (def ^:private ^:const rG 10.0)
 
@@ -179,24 +181,11 @@
                   (mark-point (:ax landing) (:ay landing))
                   (mark-point (:bx landing) (:by landing)))))
 
-          (if-let [traces (:guide-traces sc)]
-            (draw-traces traces [0 0 255])
-            (comment (doseq [t traces]
-                       (doseq [l (:trace t)] (draw-lander l [0 0 255] [0 0 255]))
-                       (let [l (last (:trace t))
-                             m (:mark t)
-                             text-width (q/text-width m)]
-                         (q/text m (- (:x l) 5 text-width) (+ (:y l) 10))
-                         (q/ellipse (:x l) (:y l) 6 6)))))
+          (if-let [traces (:guides sc)]
+            (doall (map (partial draw-trace [0 0 255]) traces)))
 
-          (if-let [traces (:lander-traces sc)]
-            (draw-traces traces [255 0 0])
-            (comment (doseq [t traces]
-                       (doseq [l (:trace t)] (draw-lander l [255 0 0] [255 0 0]))
-                       (let [l (last (:trace t))
-                             m (:mark t)
-                             text-width (q/text-width m)]
-                         (q/text m (- (:x l) 5 text-width) (+ (:y l) 10)))))))))
+          (if-let [trace (:traces sc)]
+            (draw-trace [255 0 0] trace)))))
 
   (swap! scene assoc :redraw false)) 
 

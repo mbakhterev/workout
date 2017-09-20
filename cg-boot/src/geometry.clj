@@ -62,9 +62,8 @@
                                  ^double tx ^double ty]
   (+ (* nx (- tx x)) (* ny (- ty y))))
 
-(def point-over-line? (comp pos? normal-projection))
-
-(defn x-in-range? [^double x ^Section {ax :ax bx :bx}] (and (<= ax x) (< x bx)))
+(def over-line? (comp pos? normal-projection))
+(defn in-range? [^double x ^Section {ax :ax bx :bx}] (and (<= ax x) (< x bx)))
 
 (defn- surface-points [raw-numbers]
   (map (fn [p] (apply ->Point p)) (partition 2 raw-numbers)))
@@ -184,7 +183,7 @@
 
 (defn- brake-stage [^double x ^double vx
                     ^Section {ax :ax py :ay bx :bx :as pad}]
-  (if-not (and (zero? vx) (x-in-range? pad x))
+  (if-not (and (zero? vx) (in-range? pad x))
     (let [dir (if (or (< x ax) (< 0.0 vx)) 1 -1)
           px  (if (pos? dir) bx ax)
           ox  (if (pos? dir) ax bx)]
@@ -212,7 +211,7 @@
   (if (or (and (< x ax-pad) (< vx 0.0))
           (and (> x bx-pad) (> vx 0.0)))
     (let [dir (if (< x ax-pad) 1 -1)
-          s (first (filter (partial x-in-range? x) rock))
+          s (first (filter (partial in-range? x) rock))
           surface (if (pos? dir)
                     (take-while (fn [^Section r] (<= (:ax r) x)) rock)
                     (drop-while (fn [^Section r] (<= (:bx r) x)) rock))]

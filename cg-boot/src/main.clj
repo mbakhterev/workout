@@ -1,7 +1,5 @@
 (ns main (:gen-class)
-         (:require [lander :refer :all]
-                   [geometry :refer :all]
-                   [render :refer :all]))
+         (:require [lander :as l] [geometry :as g] [render :as r]))
 
 (set! *warn-on-reflection* true)
 
@@ -10,11 +8,11 @@
 (defn- read-lander [] (doall (repeatedly 7 read)))
 
 (defn- sketch-landscape [^geometry.Landscape scape]
-  (update-scene :surface (:raw-surface scape))
-  (update-scene :landing-pad (:landing-pad scape)) 
-  (update-scene :shell (concat (:left-rock scape)
-                               [(:landing-pad scape)]
-                               (:right-rock scape))))
+  (r/update-scene :surface (:raw-surface scape))
+  (r/update-scene :landing-pad (:landing-pad scape)) 
+  (r/update-scene :shell (concat (:left-rock scape)
+                                 [(:landing-pad scape)]
+                                 (:right-rock scape))))
 
 ; Структура этого всего хозяйства:
 ;   guides - (список (список (список Lander)))
@@ -23,9 +21,9 @@
 (let [state (atom {:guides [] :traces [] :stages []})]
   (defn- reset-state []
     (reset! state {:guides [] :traces [] :stages []})
-    (update-scene :guides nil)
-    (update-scene :traces nil)
-    (update-scene :stages nil)) 
+    (r/update-scene :guides nil)
+    (r/update-scene :traces nil)
+    (r/update-scene :stages nil)) 
 
   (defn- next-guide [g]
     (swap! state (fn [st] (assoc st :guides (conj (:guides st) g))))) 
@@ -51,15 +49,15 @@
 
   (defn- sketch-state []
     (let [st (deref state)]
-      (if (check-guides (:guides st)) (update-scene :guides (:guides st)))
-      (if (unpack-traces (:traces st)) (update-scene :traces (:traces st)))
-      (if (not (empty? (:stages st))) (update-scene :stages (first (:stages st))))))
+      (if (check-guides (:guides st)) (r/update-scene :guides (:guides st)))
+      (if (unpack-traces (:traces st)) (r/update-scene :traces (:traces st)))
+      (if (not (empty? (:stages st))) (r/update-scene :stages (first (:stages st))))))
 
   (defn- trace-move [^lander.Control control]
     (swap! state (fn [st] (let [[prev curr :as traces] (unpack-traces (:traces st))]
                             (assert traces)
                             (assoc st :traces
-                                   (conj prev (conj curr (move control 1.0 ^Lander (last curr)))))))))
+                                   (conj prev (conj curr (l/move control 1.0 ^Lander (last curr)))))))))
   
   (defn- approximate-last []
     (let [[prev curr :as traces] (unpack-traces (:traces (deref state)))]
@@ -72,14 +70,14 @@
 
 (defn- make-guide [^lander.Lander {x :x vx :vx :as l}
                    ^geometry.Landscape scape]
-  (let [stages (make-stages x vx scape)]
+  (let [stages (g/make-stages x vx scape)]
     (next-stages stages)
     (sketch-state)
-    (debugln :make-guide stages)
-    (let [guide (search-guide stages l)]
+    (l/debugln :make-guide stages)
+    (let [guide (l/search-guide stages l)]
       (next-guide guide)
       (sketch-state)
-      (flatten-guide guide))))
+      (l/flatten-guide guide))))
 
 (def ^:private ^:const quanta 128)
 
@@ -105,7 +103,7 @@
 (defn- guide-loop [^lander.Lander lander guide]
   (next-trace lander)
   (loop [l lander steps 0]
-    (if-let [[delta control] (along-guide l guide)]
+    (if-let [[delta control] (l/along-guide l guide)]
       (if (> delta tolerable-drift)
         (do (dump "guide drift is too large. Correction is needed."
                   "delta:" delta
@@ -140,11 +138,10 @@
 
 (defn bad-test []
   (let [T (test-data 1)
-        S (make-landscape (:surface T))
-        L (make-lander (:lander T))
-        stages (make-stages (:x L) (:vx L) S)
-        moves (search-moves stages L)
-        guide (search-guide stages L)
+        S (g/make-landscape (:surface T))
+        L (l/make-lander (:lander T))
+        stages (g/make-stages (:x L) (:vx L) S)
+        guide (l/search-guide stages L)
         ]
     (reset-state)
 
@@ -161,11 +158,11 @@
 (defn -main [& args]
   (reset-state)
   (let [T (test-data 1)
-        S (make-landscape (:surface T))
-        L (make-lander (:lander T))]
+        S (g/make-landscape (:surface T))
+        L (l/make-lander (:lander T))]
     (sketch-landscape S)
     (loop [l L]
-      (let [[lw g] (wait-loop S (->Control 0 4) l)]
+      (let [[lw g] (wait-loop S (l/->Control 0 4) l)]
         (dump "guide length:" (count g))
         (if-let [lg (guide-loop lw g)]
           (recur lg)
