@@ -400,6 +400,21 @@
           :done (list (conj R m))
           :ok (recur (:lander m) (conj R m)))))))
 
+(def ^:const ^:parivate reverse-initial-ok? hover-initial-ok?)
+
+(defn- reverse-alive? [^geometry.Stage stage
+                       ^Lander lander
+                       ^Control control
+                       ^double dt] true)
+
+(defn- reverse-align-control ^Move [^geometry.Stage stage
+                                    ^Lander L
+                                    ^Control C])
+
+(defn- reverse-steady-control ^Move [^Stage stage ^Lander L])
+
+(defn- reverse-integrate [^geometry.Stage stage ^Lander L ^Control C])
+
 (defn- reverse-search [^geometry.Stage stage next-stages ^Lander lander] (list))
 
 ; На каждый Move получаем список из Lander-ов, которые моделируют траекторию и

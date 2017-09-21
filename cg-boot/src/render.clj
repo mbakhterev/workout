@@ -7,7 +7,7 @@
 (def ^:private ^:const space-width 7000)
 (def ^:private ^:const space-height 3000) 
 
-(def ^:private ^:const display-width (- 1920 32))
+(def ^:private ^:const display-width (- 1600 32))
 (def ^:private ^:const display-height (long (* display-width (/ space-height space-width))))
 
 (def ^:private ^:const factor-x (float (/ display-height space-height)))
@@ -130,10 +130,6 @@
                                      (recur (+ (:left nr) rx) (count (:cells nr)) (+ y dy) (rest R))))))))
 
 (defn- draw []
-  (q/stroke 255)
-  (q/stroke-weight 3)
-  (q/text "hello world" 500 500)
-
   (let [sc (deref scene)]
     (if (:redraw sc)
       (println "redrawing")
@@ -164,15 +160,10 @@
                 (q/stroke-weight 1)
                 (q/fill 0)
                 (doseq [{x :target t :mark l :left?} stages]
-                  (comment (println "stage mark:" t))
                   (q/line x 0 x (- display-height 1))
                   (if l
                     (q/text t (- x 7.5 (q/text-width t)) 10)
-                    (q/text t (+ x 7.5) 10))
-                  (let [fy (- 10 (/ (+ (q/text-ascent) (* 0.0 (q/text-descent))) 2.0))]
-                    (if l
-                      (q/line (- x 5) fy x fy)
-                      (q/line (+ x 5) fy x fy))))))
+                    (q/text t (+ x 7.5) 10)))))
 
           (if-let [landing (:landing-pad sc)]
             (do (q/stroke 255 0 0)

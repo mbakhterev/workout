@@ -53,7 +53,7 @@
     (let [st (deref state)]
       (if (check-guides (:guides st)) (r/update-scene :guides (:guides st)))
       (if (unpack-traces (:traces st)) (r/update-scene :traces (:traces st)))
-      (if (not (empty? (:stages st))) (r/update-scene :stages (first (:stages st))))))
+      (if (not (empty? (:stages st))) (r/update-scene :stages (last (:stages st))))))
 
   (defn- trace-move [^lander.Control control]
     (swap! state (fn [st] (let [[prev curr :as traces] (unpack-traces (:traces st))]
@@ -152,7 +152,7 @@
 
 (defn -main [& args]
   (reset-state)
-  (let [T (test-data 2)
+  (let [T (test-data (if (empty? args) 2 (first args)))
         S (g/make-landscape (:surface T))
         L (l/make-lander (:lander T))]
     (sketch-landscape S)
