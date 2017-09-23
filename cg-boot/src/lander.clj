@@ -4,7 +4,7 @@
 
 (defn debugln [flag & args]
   (let [flags (hash-set ; :hover-search
-                        ; :search-moves
+                        :search-moves
                         ; :solve-hover
                         ; :brake-search
                         ; :hover-search
@@ -13,6 +13,7 @@
                         ; :along-guide
                         ; :make-guide
                         ; :model-guide
+                        :reverse-search
                         )]
     (if (flags flag) (binding [*out* *err*] (apply println args)))))
 
@@ -214,7 +215,7 @@
 ; границу отрезка (такое теоретически может быть; возможно, это overkill).
 
 (defn- hover-steady-control ^Move [^Stage {xt :x-target :as stage}
-                                   ^Lander {x :x y :y vx :vx vy :vy c :control :as lander}]
+                                   ^Lander {x :x vx :vx c :control :as lander}]
   (let [ax (x-acceleration c)
         t  (Math/ceil (g/time-to-intersect-1d ax vx x xt))]
     (if (and (Double/isFinite t)
@@ -407,22 +408,50 @@
                        ^Control control
                        ^double dt] true)
 
-(defn- reverse-align-control ^Move [^geometry.Stage stage
+(defn- reverse-align-control ^Move [^geometry.Stage {xt :x-target dir :direction :as stage}
                                     ^Lander L
-                                    ^Control C])
+                                    ^Control C]
+  (loop [{c :control x :x :as l} L t 0.0]
+    (cond (= c C) (->Move :ok l t)
+          (pos? (* dir (- x xt))) (if (constraint l stage) (->Move :out l t) (->Move :ko l 0.0))
+          :else (let [c-next (control-to c C)]
+                  (if (reverse-alive? stage l c-next 1.0)
+                    (recur (just-move c-next 1.0 l) (+ 1.0 t))
+                    (->Move :ko l 0.0))))))
 
-(defn- reverse-steady-control ^Move [^geometry.Stage stage ^Lander L])
+(defn- reverse-steady-control ^Move [^geometry.Stage {xt :x-target :as stage}
+                                     ^Lander {x :x vx :vx C :control :as L}]
+  (let [ax (x-acceleration C)
+        t  (Math/ceil (g/time-to-intersect-1d ax vx x xt))]
+    (debugln :reverse-search "time to target:" t)
+    (if (and (Double/isFinite t)
+             (reverse-alive? stage L C t))
+      (let [l (just-move C t L)
+            dc (descend-constraint l)
+            bc (brake-constraint l (:direction stage))]
+        (debugln :reverse-search l)
+        (debugln :reverse-search dc)
+        (debugln :reverse-search bc)
+        (if (constraint l stage) (->Move :ok l t))))))
 
-(defn- reverse-integrate [^geometry.Stage stage ^Lander L ^Control C])
+(defn- reverse-integrate [^geometry.Stage stage ^Lander L ^Control C]
+  (let [{state :state :as m-align} (reverse-align-control stage L C)]
+    (debugln :reverse-search "m-align state:" state)
+    (case state
+      :ko nil
+      :ok (let [m-steady (reverse-steady-control stage (:lander m-align))]
+            (if m-steady (list m-steady m-align)))
+      :out (list m-align))))
 
 ; Не имеет смысла разворачиваться с нулевым ускорением и направлять ускорение в
 ; против направления разворота (в сторону скорости). В остальном та же логика,
 ; что и для hover-control-cloud
 
 (defn- reverse-control-cloud [^geometry.Stage {dir :direction :as stage} ^Lander l]
-  (let [a-from (if (pos? dir) (- angle-delta) angle-delta) 
-        a-edge (if (pos? dir) -90 90)
-        δa (if (pos? dir) (- angle-delta) angle-delta)]
+  (let [δa (* dir (- angle-delta))
+        a-from δa
+        a-edge (* dir -90)]
+    (debugln :reverse-search a-from a-edge δa)
     (for [p (range 1 5)
           a (let [a-to (:angle (:control (:lander (reverse-align-control stage l (->Control a-edge p)))))]
               (range a-from (- a-to dir) δa))]
@@ -430,11 +459,15 @@
 
 (defn- reverse-search [^geometry.Stage stage next-stages ^Lander l]
   (if (reverse-initial-ok? l stage)
-    (loop [moves-cloud (keep (partial hover-integrate stage l) (reverse-control-cloud stage l))]
+    (let [rcc (reverse-control-cloud stage l)]
+      (debugln :reverse-search "RC cloud:" rcc) 
+      (loop [moves-cloud (doall (keep (partial reverse-integrate stage l) rcc))]
+        (debugln :reverse-search "RCM cloud:" moves-cloud)
+
       (when-first [m moves-cloud]
         (if-let [m-next (search-moves next-stages (:lander (first m)))]
           (conj m-next m)
-          (recur (next moves-cloud)))))))
+          (recur (next moves-cloud))))))))
 
 ; На каждый Move получаем список из Lander-ов, которые моделируют траекторию и
 ; управление с шагом в 1 секунду. Все Move сгруппированы по стадиям в списки.
@@ -485,7 +518,8 @@
         (debugln :along-guide "next:" (nth guide (+ 1 ig)))
         (let [target (nth guide (+ 1 ig))
               cloud (along-guide-cloud l)
-              [delta closest] (apply min-key first (map (juxt (partial diff-landers target) identity) cloud))]
+              [delta closest] (apply min-key first (map (juxt (partial diff-landers target) identity)
+                                                        cloud))]
           [delta (:control closest)])))))
 
 (defn flatten-guide [guide] (vec (apply concat guide)))

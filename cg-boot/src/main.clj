@@ -164,3 +164,8 @@
           (approximate-last))))))
 
 
+(defn bad-case []
+  (let [T (test-data 2)
+        S (g/make-landscape (:surface T))
+        L (l/make-lander (:lander T))]
+    (make-guide L S)))
