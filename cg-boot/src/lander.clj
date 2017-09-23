@@ -298,12 +298,21 @@
 ; равна 0. (2.2) считаем, что должны хотя бы 0 секунд тормозить. Иначе, нам дали
 ; плохой контроль, и можно было бы потратить меньше топлива на остановку.
 
-(defn- speed-to-04 ^double [^Control control ^double vx]
+(comment (defn- speed-to-04 ^double [^Control control ^double vx]
   (loop [v vx c control]
     (if (= c (->Control 0 4))
       v
       (let [c-next (control-to c (->Control 0 4))]
+        (recur (+ v (x-acceleration c-next)) c-next))))))
+
+(defn- x-speed-adjust ^double [^Control c-from ^Control c-to ^double vx]
+  (loop [v vx c c-from]
+    (if (= c c-to)
+      v
+      (let [c-next (control-to c c-to)]
         (recur (+ v (x-acceleration c-next)) c-next)))))
+
+(defn- speed-to-04 ^double [^Control c-from ^double vx] (x-speed-adjust c-from (->Control 0 4) vx))
 
 (defn- solve-brake-2 ^Move [^Lander {vx :vx c :control :as l}
                             ^geometry.Stage {:as stage}]
@@ -434,14 +443,41 @@
         (debugln :reverse-search bc)
         (if (constraint l stage) (->Move :ok l t))))))
 
+; Наивный подход с одним контролем для разворота не работает. Следующий по
+; сложности подход - это торможение с фиксированным (контроль ±90 4), а потом
+; попытка добраться до x-target с некоторым другим контролем.
+
+(comment (defn- reverse-integrate [^geometry.Stage stage ^Lander L ^Control C]
+           (let [{state :state :as m-align} (reverse-align-control stage L C)]
+             (debugln :reverse-search "m-align state:" state)
+             (case state
+               :ko nil
+               :ok (let [m-steady (reverse-steady-control stage (:lander m-align))]
+                     (if m-steady (list m-steady m-align)))
+               :out (list m-align)))))
+
+; Слишком много будет промежуточного case-анализа. Поэтому монада. Если будет
+; тормозить, надо будет переписать в макрос.
+
+(defn- return-moves [^Move m] (fn [moves] (if moves (conj moves m))))
+
+(defn- bind-moves [compute-moves move-to-next-compute]
+  (fn [moves]
+    (if moves
+      (when))
+    )
+  
+  )
+
 (defn- reverse-integrate [^geometry.Stage stage ^Lander L ^Control C]
-  (let [{state :state :as m-align} (reverse-align-control stage L C)]
-    (debugln :reverse-search "m-align state:" state)
+  (let [{state :state :as m-1} (reverse-align-control stage L C)]
     (case state
       :ko nil
-      :ok (let [m-steady (reverse-steady-control stage (:lander m-align))]
-            (if m-steady (list m-steady m-align)))
-      :out (list m-align))))
+      :out (list m-1)
+      :ok (when-let [])
+      )
+    )
+  )
 
 ; Не имеет смысла разворачиваться с нулевым ускорением и направлять ускорение в
 ; против направления разворота (в сторону скорости). В остальном та же логика,
