@@ -411,11 +411,30 @@
                                     ^Lander L
                                     ^Control C])
 
-(defn- reverse-steady-control ^Move [^Stage stage ^Lander L])
+(defn- reverse-steady-control ^Move [^geometry.Stage stage ^Lander L])
 
 (defn- reverse-integrate [^geometry.Stage stage ^Lander L ^Control C])
 
-(defn- reverse-search [^geometry.Stage stage next-stages ^Lander lander] (list))
+; Не имеет смысла разворачиваться с нулевым ускорением и направлять ускорение в
+; против направления разворота (в сторону скорости). В остальном та же логика,
+; что и для hover-control-cloud
+
+(defn- reverse-control-cloud [^geometry.Stage {dir :direction :as stage} ^Lander l]
+  (let [a-from (if (pos? dir) (- angle-delta) angle-delta) 
+        a-edge (if (pos? dir) -90 90)
+        δa (if (pos? dir) (- angle-delta) angle-delta)]
+    (for [p (range 1 5)
+          a (let [a-to (:angle (:control (:lander (reverse-align-control stage l (->Control a-edge p)))))]
+              (range a-from (- a-to dir) δa))]
+      (->Control a p))))
+
+(defn- reverse-search [^geometry.Stage stage next-stages ^Lander l]
+  (if (reverse-initial-ok? l stage)
+    (loop [moves-cloud (keep (partial hover-integrate stage l) (reverse-control-cloud stage l))]
+      (when-first [m moves-cloud]
+        (if-let [m-next (search-moves next-stages (:lander (first m)))]
+          (conj m-next m)
+          (recur (next moves-cloud)))))))
 
 ; На каждый Move получаем список из Lander-ов, которые моделируют траекторию и
 ; управление с шагом в 1 секунду. Все Move сгруппированы по стадиям в списки.
