@@ -143,7 +143,11 @@
           hr (+ h (reserve-dh (+ (:h bc) (:h dc))))]
       (debugln :constraint "bc:" bc)
       (debugln :constraint "dc:" dc)
-      (debugln :constraint "x:" (* dir (- xr xp)) "y:" hr "fuel:" (* 4.0 (+ (:t bc) (:t dc))) "y-pad:" yp)
+      (debugln :constraint
+               "x:" (* dir (- xr xp)) (neg? (* dir (- xr xp)))
+               "y:" hr (< yp hr)
+               "fuel:" (* 4.0 (+ (:t bc) (:t dc)))
+               "y-pad:" yp)
       (and (neg? (* dir (- xr xp)))
            (< yp hr)
            (< (* 4.0 (+ (:t bc) (:t dc))) fuel)))))
@@ -510,24 +514,26 @@
     (if (or (zero? ax)
             (neg? (* vx v-drop)))
       (->Move :ok l 0.0)
-      (let [t-brake (Math/ceil (g/time-to-speed ax v-drop (* dir 10.0)))]
+      (let [t-brake (Math/ceil (g/time-to-speed ax v-drop (* dir 80.0)))]
         (if (and (Double/isFinite t-brake)
                  (reverse-alive? stage l c t-brake))
           (->Move :ok (just-move c t-brake l) t-brake))))))
 
-(defn- reverse-integrate [^geometry.Stage {dir :direction :as stage} ^Lander L ^Control C]
+(defn- reverse-integrate [^geometry.Stage {dir :direction :as stage}
+                          ^Lander L
+                          [^Control c-brake ^Control c-target :as C]]
   (debugln :reverse-search \newline)
   (debugln :reverse-search "trying" C)
   (let [after (partial m-after (partial constraint stage))]
     ((after
        "align (control ±90 4)"
-       (partial reverse-align-control stage (->Control (* dir -45) 4))
+       (partial reverse-align-control stage c-brake)
        (after
          "steady reverse brake"
-         (partial reverse-solve-brake stage C)
+         (partial reverse-solve-brake stage c-target)
          (after
            "align control"
-           (partial reverse-align-control stage C)
+           (partial reverse-align-control stage c-target)
            (after
              "steady control"
              (partial reverse-steady-control stage)
@@ -538,20 +544,34 @@
 ; против направления разворота (в сторону скорости). В остальном та же логика,
 ; что и для hover-control-cloud
 
-(defn- reverse-control-cloud [^geometry.Stage {dir :direction :as stage} ^Lander l]
-  (let [δa (* dir (- angle-delta))
-        a-from 0
-        a-edge (* dir -90)]
-    (debugln :reverse-search a-from a-edge δa)
-    (for [p (range 4 5)
-          a (let [a-to (:angle (:control (:lander (reverse-align-control stage (->Control a-edge p) l))))]
-              (range a-from (- a-to dir) δa))]
-      (->Control a p))))
+(comment (defn- reverse-control-cloud [^geometry.Stage {dir :direction :as stage} ^Lander l]
+           (let [δa (* dir (- angle-delta))
+                 a-from 0
+                 a-edge (* dir -90)]
+             (debugln :reverse-search a-from a-edge δa)
+             (for [p (range 4 5)
+                   a (let [a-to (:angle (:control (:lander (reverse-align-control stage (->Control a-edge p) l))))]
+                       (range a-from (- a-to dir) δa))]
+               (->Control a p)))))
+
+(let [make-cloud (fn [^long dir]
+                   (let [δa (* dir (- angle-delta))
+                         a-from 0
+                         a-to (* dir -91)
+                         P (range 4 5)
+                         A (range a-from a-to δa)
+                         C (vec (for [p P a A] (->Control a p)))
+                         CT (vec (for [p P a (range -90 91 angle-delta)] (->Control a p)))]
+                     (vec (for [c-brake C c-target CT] [c-brake c-target]))))
+      l-cloud (make-cloud 1)
+      r-cloud (make-cloud -1)]
+  (defn- reverse-control-cloud [^geometry.Stage {dir :direction}]
+    (if (pos? dir) l-cloud r-cloud)))
 
 (defn- reverse-search [^geometry.Stage stage next-stages ^Lander l]
   (debugln :reverse-search "RUNNING WITH Lander" l)
   (if (reverse-initial-ok? l stage)
-    (let [rcc (reverse-control-cloud stage l)]
+    (let [rcc (reverse-control-cloud stage)]
       (debugln :reverse-search "RC cloud:" rcc) 
       (loop [moves-cloud (doall (keep (partial reverse-integrate stage l) rcc))]
         (debugln :reverse-search "RCM cloud:" moves-cloud)
