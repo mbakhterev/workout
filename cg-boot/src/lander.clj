@@ -4,7 +4,8 @@
 
 (defn debugln [flag & args]
   (let [flags (hash-set ; :hover-search
-                        :search-moves
+                        :after
+                        ; :search-moves
                         ; :solve-hover
                         ; :brake-search
                         ; :hover-search
@@ -14,6 +15,7 @@
                         ; :make-guide
                         ; :model-guide
                         :reverse-search
+                        :constraint
                         )]
     (if (flags flag) (binding [*out* *err*] (apply println args)))))
 
@@ -127,17 +129,21 @@
         ay (y-acceleration φ 4)
         ax (x-acceleration φ 4)
         t  (g/time-to-brake ax vx)]
-    (if (<= 0.0 t)
+    (if (Double/isInfinite t)
+      (->Constraint 0.0 0.0 0.0)
       (->Constraint (+ (* vx t) (* 0.5 ax ax t)) 
                     (+ (* vy t) (* 0.5 ay ay t))
                     t))))
 
-(defn- constraint [^Lander {x :x h :y fuel :fuel :as l}
-                   ^geometry.Stage {xp :x-pad yp :y-pad dir :direction}]
+(defn- constraint [^geometry.Stage {xp :x-pad yp :y-pad dir :direction}
+                   ^Lander {x :x h :y fuel :fuel :as l}]
   (if-let [bc (brake-constraint l dir)]
     (let [dc (descend-constraint l)
           xr (+ x (reserve-dx (:x bc)))
           hr (+ h (reserve-dh (+ (:h bc) (:h dc))))]
+      (debugln :constraint "bc:" bc)
+      (debugln :constraint "dc:" dc)
+      (debugln :constraint "x:" (* dir (- xr xp)) "y:" hr "fuel:" (* 4.0 (+ (:t bc) (:t dc))) "y-pad:" yp)
       (and (neg? (* dir (- xr xp)))
            (< yp hr)
            (< (* 4.0 (+ (:t bc) (:t dc))) fuel)))))
@@ -204,7 +210,7 @@
                                   ^Control c-target]
   (loop [{c :control x :x :as l} l-init t 0.0]
     (cond (= c c-target) (->Move :ok l t)
-          (pos? (* dir (- x xt))) (if (constraint l stage) (->Move :out l t) (->Move :ko l 0.0))
+          (pos? (* dir (- x xt))) (if (constraint stage l) (->Move :out l t) (->Move :ko l 0.0))
           :else (let [c-next (control-to c c-target)]
                   (if (hover-alive? stage l c-next 1.0)
                     (recur (just-move c-next 1.0 l) (+ 1.0 t))
@@ -221,8 +227,8 @@
     (if (and (Double/isFinite t)
              (hover-alive? stage lander c t))
       (let [l (just-move c t lander)]
-        (debugln :hover-search "hsc. constraint" (constraint l stage))
-        (if (constraint l stage) (->Move :ok l t))))))
+        (debugln :hover-search "hsc. constraint" (constraint stage l))
+        (if (constraint stage l) (->Move :ok l t))))))
 
 (defn- hover-integrate [^geometry.Stage stage ^Lander lander ^Control c]
   (let [{state :state :as m-align} (hover-align-control stage lander c)]
@@ -417,18 +423,29 @@
                        ^Control control
                        ^double dt] true)
 
-(defn- reverse-align-control ^Move [^geometry.Stage {xt :x-target dir :direction :as stage}
-                                    ^Lander L
-                                    ^Control C]
+(comment (defn- reverse-align-control ^Move [^geometry.Stage {xt :x-target dir :direction :as stage}
+                                    ^Control C  
+                                    ^Lander L]
   (loop [{c :control x :x :as l} L t 0.0]
     (cond (= c C) (->Move :ok l t)
-          (pos? (* dir (- x xt))) (if (constraint l stage) (->Move :out l t) (->Move :ko l 0.0))
+          (pos? (* dir (- x xt))) (if (constraint stage l) (->Move :out l t) (->Move :ko l 0.0))
+          :else (let [c-next (control-to c C)]
+                  (if (reverse-alive? stage l c-next 1.0)
+                    (recur (just-move c-next 1.0 l) (+ 1.0 t))
+                    (->Move :ko l 0.0)))))))
+
+(defn- reverse-align-control ^Move [^geometry.Stage {xt :x-target dir :direction :as stage}
+                                    ^Control C  
+                                    ^Lander L]
+  (loop [{c :control x :x :as l} L t 0.0]
+    (cond (= c C) (->Move :ok l t)
+          (pos? (* dir (- x xt))) (->Move :out l t) 
           :else (let [c-next (control-to c C)]
                   (if (reverse-alive? stage l c-next 1.0)
                     (recur (just-move c-next 1.0 l) (+ 1.0 t))
                     (->Move :ko l 0.0))))))
 
-(defn- reverse-steady-control ^Move [^geometry.Stage {xt :x-target :as stage}
+(comment (defn- reverse-steady-control ^Move [^geometry.Stage {xt :x-target :as stage}
                                      ^Lander {x :x vx :vx C :control :as L}]
   (let [ax (x-acceleration C)
         t  (Math/ceil (g/time-to-intersect-1d ax vx x xt))]
@@ -441,7 +458,16 @@
         (debugln :reverse-search l)
         (debugln :reverse-search dc)
         (debugln :reverse-search bc)
-        (if (constraint l stage) (->Move :ok l t))))))
+        (if (constraint stage l) (->Move :ok l t)))))))
+
+(defn- reverse-steady-control ^Move [^geometry.Stage {xt :x-target :as stage}
+                                     ^Lander {x :x vx :vx C :control :as L}]
+  (let [ax (x-acceleration C)
+        t  (Math/ceil (g/time-to-intersect-1d ax vx x xt))]
+    (debugln :reverse-search "time to target:" t)
+    (if (and (Double/isFinite t)
+             (reverse-alive? stage L C t))
+      (->Move :ok (just-move C t L) t))))
 
 ; Наивный подход с одним контролем для разворота не работает. Следующий по
 ; сложности подход - это торможение с фиксированным (контроль ±90 4), а потом
@@ -456,28 +482,57 @@
                      (if m-steady (list m-steady m-align)))
                :out (list m-align)))))
 
-; Слишком много будет промежуточного case-анализа. Поэтому монада. Если будет
-; тормозить, надо будет переписать в макрос.
+; Слишком много будет промежуточного case-анализа. Поэтому небольшая
+; импровизация в monad-стиле
 
-(defn- return-moves [^Move m] (fn [moves] (if moves (conj moves m))))
+(defn- m-after [constraints-ok? mark next-move continue-with]
+  (fn [^Lander L moves]
+    (when-let [{st :state l :lander :as m} (next-move L)]
+      (debugln :after mark "next:" m)
+      (case st
+        :ko nil
+        :out (let [c (constraints-ok? l)]
+               (debugln :after mark "constraints:" c)
+               (if c (conj moves m)))
+        :ok (let [c (constraints-ok? l)]
+              (debugln :after mark "constraints:" c)
+              (if c (continue-with l (conj moves m))))))))
 
-(defn- bind-moves [compute-moves move-to-next-compute]
-  (fn [moves]
-    (if moves
-      (when))
-    )
-  
-  )
+(defn- m-extract [^Lander l moves] moves)
 
-(defn- reverse-integrate [^geometry.Stage stage ^Lander L ^Control C]
-  (let [{state :state :as m-1} (reverse-align-control stage L C)]
-    (case state
-      :ko nil
-      :out (list m-1)
-      :ok (when-let [])
-      )
-    )
-  )
+; Логика примерно та же самая, что и в solve-brake-2
+
+(defn- reverse-solve-brake ^Move [^geometry.Stage {dir :direction :as stage}
+                                  ^Control C
+                                  ^Lander {vx :vx c :control :as l}]
+  (let [ax (x-acceleration c)
+        v-drop (x-speed-adjust c C vx)]
+    (if (or (zero? ax)
+            (neg? (* vx v-drop)))
+      (->Move :ok l 0.0)
+      (let [t-brake (Math/ceil (g/time-to-speed ax v-drop (* dir 10.0)))]
+        (if (and (Double/isFinite t-brake)
+                 (reverse-alive? stage l c t-brake))
+          (->Move :ok (just-move c t-brake l) t-brake))))))
+
+(defn- reverse-integrate [^geometry.Stage {dir :direction :as stage} ^Lander L ^Control C]
+  (debugln :reverse-search \newline)
+  (debugln :reverse-search "trying" C)
+  (let [after (partial m-after (partial constraint stage))]
+    ((after
+       "align (control ±90 4)"
+       (partial reverse-align-control stage (->Control (* dir -45) 4))
+       (after
+         "steady reverse brake"
+         (partial reverse-solve-brake stage C)
+         (after
+           "align control"
+           (partial reverse-align-control stage C)
+           (after
+             "steady control"
+             (partial reverse-steady-control stage)
+             m-extract))))
+     L (list))))
 
 ; Не имеет смысла разворачиваться с нулевым ускорением и направлять ускорение в
 ; против направления разворота (в сторону скорости). В остальном та же логика,
@@ -485,25 +540,25 @@
 
 (defn- reverse-control-cloud [^geometry.Stage {dir :direction :as stage} ^Lander l]
   (let [δa (* dir (- angle-delta))
-        a-from δa
+        a-from 0
         a-edge (* dir -90)]
     (debugln :reverse-search a-from a-edge δa)
-    (for [p (range 1 5)
-          a (let [a-to (:angle (:control (:lander (reverse-align-control stage l (->Control a-edge p)))))]
+    (for [p (range 4 5)
+          a (let [a-to (:angle (:control (:lander (reverse-align-control stage (->Control a-edge p) l))))]
               (range a-from (- a-to dir) δa))]
       (->Control a p))))
 
 (defn- reverse-search [^geometry.Stage stage next-stages ^Lander l]
+  (debugln :reverse-search "RUNNING WITH Lander" l)
   (if (reverse-initial-ok? l stage)
     (let [rcc (reverse-control-cloud stage l)]
       (debugln :reverse-search "RC cloud:" rcc) 
       (loop [moves-cloud (doall (keep (partial reverse-integrate stage l) rcc))]
         (debugln :reverse-search "RCM cloud:" moves-cloud)
-
-      (when-first [m moves-cloud]
-        (if-let [m-next (search-moves next-stages (:lander (first m)))]
-          (conj m-next m)
-          (recur (next moves-cloud))))))))
+        (when-first [m moves-cloud]
+          (if-let [m-next (search-moves next-stages (:lander (first m)))]
+            (conj m-next m)
+            (recur (next moves-cloud))))))))
 
 ; На каждый Move получаем список из Lander-ов, которые моделируют траекторию и
 ; управление с шагом в 1 секунду. Все Move сгруппированы по стадиям в списки.

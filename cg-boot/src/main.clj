@@ -167,5 +167,9 @@
 (defn bad-case []
   (let [T (test-data 2)
         S (g/make-landscape (:surface T))
-        L (l/make-lander (:lander T))]
+        L #lander.Lander{:x 3095.0, :y 2665.0,
+                         :vx -98.0, :vy 1.0, :fuel 616, :control #lander.Control{:angle 0, :power 4}}
+        L2 #lander.Lander{:x 1581.4441253144803, :y 1959.1236574863271,
+                          :vx 0.32994698875639994, :vy -43.43953590991956, :fuel 488,
+                          :control #lander.Control{:angle 0, :power 4}}]
     (make-guide L S)))
