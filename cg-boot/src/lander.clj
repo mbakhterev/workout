@@ -409,7 +409,8 @@
       (if (brake-alive? stage l-init c t)
         (let [l  (just-move c t l-init)
               dc (descend-constraint l)]
-          (if (< y-pad (+ (:y l) (:h dc)))
+          (if (and (< y-pad (+ (:y l) (:h dc)))
+                   (< (* 4.0 (:t dc)) (:fuel l)))
             (->Move :ok l t)))))))
 
 (defn- descend-search [^geometry.Stage stage ^Lander lander]
