@@ -207,22 +207,6 @@
           ox  (if (pos? dir) ax bx)]
       (list (->Stage pad px ox px py dir :brake nil)))))
 
-(comment (defn- hover-stages [^double x
-                              ^Section {ax-pad :ax y-pad :ay bx-pad :bx :as pad}
-                              rock]
-           (letfn [(on-left [^Section s]
-                     (if (< x (:bx s) bx-pad)
-                       (map (fn [[^double o ^double t]] (->Stage s t o bx-pad y-pad 1 :hover nil))
-                            (divide-stage (max (:ax s) x) (:bx s)))))
-                   (on-right [^Section s]
-                     (if (> x (:ax s) ax-pad)
-                       (map (fn [[^double o ^double t]] (->Stage s t o ax-pad y-pad -1 :hover nil))
-                            (divide-stage (min x (:bx s)) (:ax s)))))
-                   (divide-stage [^double a ^double b]
-                     (partition 2 1 (concat (range a b (* (compare b a) 2048.0)) (list b))))]
-             (cond (< x ax-pad) (mapcat on-left rock)
-               (> x bx-pad) (mapcat on-right (reverse rock))))))
-
 (defn- need-to-reverse? [^double x ^double vx ^Section {ax-pad :ax bx-pad :bx}]
   (or (and (< x ax-pad) (< vx 0.0))
       (and (> x bx-pad) (> vx 0.0))))
@@ -252,11 +236,12 @@
           surface (if (pos? dir)
                     (take-while (fn [^Section r] (<= (:ax r) x)) rock)
                     (drop-while (fn [^Section r] (<= (:bx r) x)) rock))]
-      (list (->Stage s (if (pos? dir) (:bx s) (:ax s)) (if (pos? dir) 0.0 x-max)
+      (list (->Stage s
+                     (if (pos? dir) (:bx s) (:ax s)) (if (pos? dir) 0.0 x-max)
                      (if (pos? dir) bx-pad ax-pad) y-pad
                      dir
                      :reverse
-                     surface)))))
+                     (vec surface))))))
 
 (defn- descend-stage [^double x
                       ^Section {ax-pad :ax y-pad :ay bx-pad :bx :as pad}]

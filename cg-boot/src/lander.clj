@@ -4,7 +4,7 @@
 
 (defn debugln [flag & args]
   (let [flags (hash-set ; :hover-search
-                        :after
+                        ; :after
                         ; :search-moves
                         ; :solve-hover
                         ; :brake-search
@@ -14,8 +14,8 @@
                         ; :along-guide
                         ; :make-guide
                         ; :model-guide
-                        :reverse-search
-                        :constraint
+                        ; :reverse-search
+                        ; :constraint
                         )]
     (if (flags flag) (binding [*out* *err*] (apply println args)))))
 
@@ -203,7 +203,7 @@
         x-next (g/poly-2 (* 0.5 ax) vx x dt)
         y-next (g/poly-2 (* 0.5 ay) vy y dt)]
     (and (< dt (g/time-to-intersect-2d [ax vx x] [ay vy y] s))
-         (or (g/non-zero? (g/normal-projection s x-next y-next)) (g/over-line? s x y))
+         (or (g/non-zero? (g/normal-projection s x y)) (g/over-line? s x-next y-next))
          (< dt (g/time-to-intersect-1d ay vy y g/y-max))
          (or (g/non-zero? (- y g/y-max)) (<= y-next g/y-max))
          (< dt (g/time-to-intersect-1d ax vx x ox))
@@ -422,10 +422,30 @@
 
 (def ^:const ^:parivate reverse-initial-ok? hover-initial-ok?)
 
-(defn- reverse-alive? [^geometry.Stage stage
-                       ^Lander lander
-                       ^Control control
-                       ^double dt] true)
+(defn- check-section [^double dt
+                      [^double x-next ^double y-next]
+                      [^double ax ^double vx ^double x :as x-params]
+                      y-params]
+  (fn [^geometry.Section s]
+    (let [y (y-params 2)
+          t-intersect (g/time-to-intersect-2d x-params y-params s)
+          x-intersect (g/poly-2 (* 0.5 ax) vx x t-intersect)]
+      (and (or (< dt t-intersect) (not (g/in-range? x-intersect s)))
+           (or (g/non-zero? (g/normal-projection s x y)) (g/over-line? s x-next y-next))))))
+
+(defn- reverse-alive? [^geometry.Stage {S :surface dir :direction xo :x-opposite}
+                       ^Lander {x :x y :y vx :vx vy :vy}
+                       ^Control {a :angle p :power}
+                       ^double dt]
+  (let [ax (x-acceleration a p)
+        ay (y-acceleration a p)
+        x-next (g/poly-2 (* 0.5 ax) vx x dt)
+        y-next (g/poly-2 (* 0.5 ay) vy y dt)]
+    (and (< dt (g/time-to-intersect-1d ay vy y g/y-max))
+         (or (g/non-zero? (- y g/y-max)) (<= y-next g/y-max))
+         (< dt (g/time-to-intersect-1d ax vx x xo))
+         (or (g/non-zero? (- x xo)) (pos? (* dir (- x-next xo))))
+         (every? (check-section dt [x-next y-next] [ax vx x] [ay vy y]) S))))
 
 (comment (defn- reverse-align-control ^Move [^geometry.Stage {xt :x-target dir :direction :as stage}
                                     ^Control C  
@@ -507,6 +527,7 @@
 ; Логика примерно та же самая, что и в solve-brake-2
 
 (defn- reverse-solve-brake ^Move [^geometry.Stage {dir :direction :as stage}
+                                  ^double speed
                                   ^Control C
                                   ^Lander {vx :vx c :control :as l}]
   (let [ax (x-acceleration c)
@@ -514,14 +535,14 @@
     (if (or (zero? ax)
             (neg? (* vx v-drop)))
       (->Move :ok l 0.0)
-      (let [t-brake (Math/ceil (g/time-to-speed ax v-drop (* dir 80.0)))]
+      (let [t-brake (Math/ceil (g/time-to-speed ax v-drop (* dir speed)))]
         (if (and (Double/isFinite t-brake)
                  (reverse-alive? stage l c t-brake))
           (->Move :ok (just-move c t-brake l) t-brake))))))
 
 (defn- reverse-integrate [^geometry.Stage {dir :direction :as stage}
                           ^Lander L
-                          [^Control c-brake ^Control c-target :as C]]
+                          [^Control c-brake speed ^Control c-target :as C]]
   (debugln :reverse-search \newline)
   (debugln :reverse-search "trying" C)
   (let [after (partial m-after (partial constraint stage))]
@@ -530,7 +551,7 @@
        (partial reverse-align-control stage c-brake)
        (after
          "steady reverse brake"
-         (partial reverse-solve-brake stage c-target)
+         (partial reverse-solve-brake stage speed c-target)
          (after
            "align control"
            (partial reverse-align-control stage c-target)
@@ -560,9 +581,10 @@
                          a-to (* dir -91)
                          P (range 4 5)
                          A (range a-from a-to δa)
-                         C (vec (for [p P a A] (->Control a p)))
-                         CT (vec (for [p P a (range -90 91 angle-delta)] (->Control a p)))]
-                     (vec (for [c-brake C c-target CT] [c-brake c-target]))))
+                         C (for [p P a A] (->Control a p))
+                         CT (for [p P a (range -90 91 angle-delta)] (->Control a p))
+                         S (range 96 15 -16)]
+                     (vec (for [c-brake (reverse C) speed S c-target CT] [c-brake speed c-target]))))
       l-cloud (make-cloud 1)
       r-cloud (make-cloud -1)]
   (defn- reverse-control-cloud [^geometry.Stage {dir :direction}]
