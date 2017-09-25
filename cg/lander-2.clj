@@ -820,6 +820,8 @@
         (let [target (nth guide (+ 1 ig))]
           [δ (:control target)])))))
 
+(defn flatten-guide [guide] (vec (apply concat guide)))
+
 (ns Player (:gen-class) (:require [lander :as l] [geometry :as g]))
 
 (set! *warn-on-reflection* true)
@@ -828,40 +830,81 @@
 (defn- read-surface [] (let [N (read)] (doall (repeatedly (* 2 N) read))))
 (defn- read-lander [] (doall (repeatedly 7 read)))
 
-(defn- refine-guide [guide] (vec (apply concat (first guide) (map rest (rest guide)))))
+(defn- make-guide [^lander.Lander {x :x vx :vx :as l}
+                   ^geometry.Landscape scape]
+  (let [stages (g/make-stages x vx scape)]
+    (l/debugln :make-guide stages)
+    (let [guide (l/search-guide stages l)]
+      (l/flatten-guide guide))))
 
-(defn- make-guide [^lander.Lander i-lander ^geometry.Landscape scape]
-  (let [stages (detect-stages i-lander scape)]
-    (debugln :make-guide stages)
-    (let [guide (model-control (search-guide stages i-lander) i-lander)]
-      (refine-guide guide))))
+(defn- trace-move [^lander.Control {a :angle p :power}] (println a p))
+(defn- approximate-last ^lander.Lander [] (l/make-lander (read-lander)))
+
+(defn- routine ^lander.Lander [^lander.Lander l ^lander.Control control guide]
+  (when-let [[δ c] (if guide (l/along-guide l guide) [0.0 control])]
+    (trace-move c)
+    (approximate-last)))
+
+(defn- done-it [what ^lander.Lander l]
+  (dump (str what " is DONE.") "Last lander:" l)
+  nil)
 
 (def ^:private ^:const quanta 128)
 
-(defn- trace-move [^lander.Control {a :angle p :power}] (println a p))
-(defn- approximate-last [] (form-lander (read-lander)))
+(comment (defn- wait-loop [^geometry.Landscape scape
+                           ^lander.Control control
+                           ^lander.Lander lander]
+           (loop [l lander G (future (make-guide lander scape)) steps 0]
+             (if-let [g (deref G quanta nil)] 
+               (do (dump "guide computation is DONE." "steps:" steps "guide length:" (count g))
+                   (if (empty? g)
+                     (do (dump "guide computation is FAILED. Continuing wait routine")
+                         (trace-move control)
+                         (let [tl (approximate-last)]
+                           (recur tl (future (make-guide tl scape)) 0)))
+                     [l g]))
+               (do (dump "waiting for guide with control:" control)
+                   (trace-move control)
+                   (recur (approximate-last) G (+ 1 steps)))))))
 
 (defn- wait-loop [^geometry.Landscape scape
                   ^lander.Control control
-                  ^lander.Lander lander]
+                  ^lander.Lander lander
+                  g-known]
   (loop [l lander G (future (make-guide lander scape)) steps 0]
     (if-let [g (deref G quanta nil)] 
       (do (dump "guide computation is DONE." "steps:" steps "guide length:" (count g))
           (if (empty? g)
-            (do (dump "guide computation is FAILED. Continuing wait routine")
-                (trace-move control)
-                (let [tl (approximate-last)]
-                  (recur tl (future (make-guide tl scape)) 0)))
+            (do (dump "guide computation is FAILED. Continuing with routine")
+                (if-let [l-next (routine l control g-known)]
+                  (recur l-next (future (make-guide l-next scape)) 0)
+                  (done-it "routine" l)))
             [l g]))
-      (do (dump "waiting for guide with control:" control)
-          (trace-move control)
-          (recur (approximate-last) G (+ 1 steps))))))
+      (do (dump "waiting for guide with routine")
+          (if-let [l-next (routine l control g-known)]
+            (recur l-next G (+ 1 steps))
+            (done-it "routine" l))))))
 
 (def ^:private ^:const tolerable-drift (* 4.0 4.0))
 
+(comment (defn- guide-loop [^lander.Lander lander guide]
+           (loop [l lander steps 0]
+             (if-let [[delta control] (along-guide l guide)]
+               (if (> delta tolerable-drift)
+                 (do (dump "guide drift is too large. Correction is needed."
+                           "delta:" delta
+                           "steps:" steps
+                           "x:" (:x l))
+                     l)
+                 (do (dump "delta is ok:" delta)
+                     (trace-move control)
+                     (recur (approximate-last) (+ 1 steps))))
+               (do (dump "guide following is DONE")
+                   nil)))))
+
 (defn- guide-loop [^lander.Lander lander guide]
   (loop [l lander steps 0]
-    (if-let [[delta control] (along-guide l guide)]
+    (if-let [[delta control] (l/along-guide l guide)]
       (if (> delta tolerable-drift)
         (do (dump "guide drift is too large. Correction is needed."
                   "delta:" delta
@@ -871,8 +914,7 @@
         (do (dump "delta is ok:" delta)
             (trace-move control)
             (recur (approximate-last) (+ 1 steps))))
-      (do (dump "guide following is DONE")
-          nil))))
+      (done-it "guide following" l))))
 
 (defn -main [& args]
   (let [raw-surface (read-surface)
@@ -881,9 +923,9 @@
         L (form-lander raw-lander)]
     (dump "surface:" raw-surface)
     (dump "lander:" raw-lander)
-    (loop [l L]
-      (let [[lw g] (wait-loop S (->Control 0 4) l)]
+    (loop [l L g-known nil]
+      (let [[lw g] (wait-loop S (->Control 0 4) l g-known)]
         (dump "guide length:" (count g))
         (if-let [lg (guide-loop lw g)]
-          (recur lg)))))
+          (recur lg g)))))
   (while true (println 0 4) (read-lander)))
