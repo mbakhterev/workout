@@ -2,8 +2,6 @@
 
 (set! *warn-on-reflection* true)
 
-(set! *warn-on-reflection* true)
-
 (def ^:const x-max (- 7000.0 1.0))
 (def ^:const y-max (- 3000.0 1.0))
 
@@ -60,8 +58,8 @@
                                          (:x b) (:y b)
                                          nx ny)))
 
-(defn normal-projection ^double [^Section {x :ax y :ay nx :nx ny :ny}
-                                 ^double tx ^double ty]
+(defn normal-projection [^Section {x :ax y :ay nx :nx ny :ny}
+                         ^double tx ^double ty]
   (+ (* nx (- tx x)) (* ny (- ty y))))
 
 (def over-line? (comp pos? normal-projection))
@@ -159,9 +157,9 @@
 ; Рассчёт времени пересечения траектории с ускорением (ax ay) начальной скоростью (vx vy) и
 ; положением (x y) и прямой проходящей через (x0 y0) с нормалью (nx ny).
 
-(defn time-to-intersect-2d ^double [[^double ax ^double vx ^double x]
-                                    [^double ay ^double vy ^double y]
-                                    ^Section {x0 :ax y0 :ay nx :nx ny :ny}]
+(defn time-to-intersect-2d [[^double ax ^double vx ^double x]
+                            [^double ay ^double vy ^double y]
+                            ^Section {x0 :ax y0 :ay nx :nx ny :ny}]
   (let [a (* 0.5 (+ (* nx ax) (* ny ay)))
         b (+ (* nx vx) (* ny vy))
         c (+ (* nx (- x x0)) (* ny (- y y0)))]
@@ -169,17 +167,17 @@
 
 ; Время пересечения линии x = tx
 
-(defn time-to-intersect-1d ^double [^double ax ^double vx ^double x ^double tx]
+(defn time-to-intersect-1d [^double ax ^double vx ^double x ^double tx]
   (positive-root-of-square-equation (* 0.5 ax) vx (- x tx)))
 
 ; Время достижения сброса некоторой скорости до нуля. Как и прежде, +Inf
 ; означает «никогда»
 
-(defn time-to-speed ^double [^double a ^double v ^double v-target]
+(defn time-to-speed [^double a ^double v ^double v-target]
   (let [t (/ (- v-target v) a)]
     (if (>= t 0.0) t Double/POSITIVE_INFINITY)))
 
-(defn time-to-brake ^double [^double a ^double v] (time-to-speed a v 0.0))
+(defn time-to-brake [^double a ^double v] (time-to-speed a v 0.0))
 
 ; Построение стадий полёта.
 
@@ -202,7 +200,7 @@
 
 (defn- brake-stage [^double x ^double vx
                     ^Section {ax :ax py :ay bx :bx :as pad}]
-  (if-not (and (zero? vx) (in-range? pad x))
+  (if-not (and (zero? vx) (in-range? x pad))
     (let [dir (if (or (< x ax) (< 0.0 vx)) 1 -1)
           px  (if (pos? dir) bx ax)
           ox  (if (pos? dir) ax bx)]
@@ -255,7 +253,7 @@
 
 (set! *warn-on-reflection* true)
 
-(defn- debugln [flag & args]
+(defn debugln [flag & args]
   (comment (let [flags (hash-set ; :hover-search
                                  ; :after
                                  ; :search-moves
@@ -285,7 +283,7 @@
 
 (defrecord Constraint [^double x ^double h ^double t])
 
-(defn make-lander ^Lander [raw-numbers]
+(defn make-lander ^lander.Lander [raw-numbers]
   (let [[m c] (split-at 5 raw-numbers)]
     (apply ->Lander (conj (vec m) (apply ->Control c)))))
 
@@ -317,11 +315,11 @@
       x-table (make-table x-force)
       y-table (make-table y-force)]
   (defn- x-acceleration
-    (^double [^Control {a :angle p :power}] (x-acceleration a p))
-    (^double [^long a ^long p] ((x-table p) (+ 90 a))))
+    ([^Control {a :angle p :power}] (x-acceleration a p))
+    ([^long a ^long p] ((x-table p) (+ 90 a))))
   (defn- y-acceleration
-    (^double [^Control {a :angle p :power}] (y-acceleration a p))
-    (^double [^long a ^long p] ((y-table p) (+ 90 a)))))
+    ([^Control {a :angle p :power}] (y-acceleration a p))
+    ([^long a ^long p] ((y-table p) (+ 90 a)))))
 
 ; Движение модуля l при управлении (vec angle power). Сохраняем новое положение
 ; модуля и то управление, которое привело его в это положение. Положение -
@@ -811,7 +809,7 @@
 
 (defn along-guide [^Lander l guide]
   (if (not (empty? guide))
-    (let [[δ ig] (reduce-kv (fn [[^long k ^double M :as r] ^long i ^Lander g]
+    (let [[ig δ] (reduce-kv (fn [[^long k ^double M :as r] ^long i ^Lander g]
                               (let [mi (diff-landers l g)]
                                 (if (<= M mi) r [i mi])))
                             [0 (diff-landers l (nth guide 0))]
@@ -919,12 +917,12 @@
 (defn -main [& args]
   (let [raw-surface (read-surface)
         raw-lander (read-lander)
-        S (detect-landscape raw-surface)
-        L (form-lander raw-lander)]
+        S (g/make-landscape raw-surface)
+        L (l/make-lander raw-lander)]
     (dump "surface:" raw-surface)
     (dump "lander:" raw-lander)
     (loop [l L g-known nil]
-      (let [[lw g] (wait-loop S (->Control 0 4) l g-known)]
+      (let [[lw g] (wait-loop S (l/->Control 0 4) l g-known)]
         (dump "guide length:" (count g))
         (if-let [lg (guide-loop lw g)]
           (recur lg g)))))
