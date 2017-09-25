@@ -28,17 +28,17 @@
                    ^long fuel
                    ^Control control])
 
+(defrecord Move [state ^Lander lander ^double dt])
+
 (defrecord Constraint [^double x ^double h ^double t])
 
 (defn make-lander ^Lander [raw-numbers]
   (let [[m c] (split-at 5 raw-numbers)]
     (apply ->Lander (conj (vec m) (apply ->Control c)))))
 
-(defrecord Move [state ^Lander lander ^double dt])
-
 (let [angle-max-delta 15
       power-max-delta 1
-      tune-value (fn [^long current ^long goal ^long max-delta]
+      tune-value (fn ^long [^long current ^long goal ^long max-delta]
                    (let [delta (- goal current)]
                      (cond (= 0 delta) goal
                            (< 0 delta) (if (< delta max-delta) goal (+ current max-delta))
@@ -101,8 +101,9 @@
   (and (on-radar? l)
        (over-line? l (first (filter (partial in-range? l) surface)))))
 
-; Рассчёты для стадии последнего снижения: погашение вертикальной скорости с
-; управлением (vec 0 4) 
+; Рассчёты ограничений на движение модуля. Необходимо иметь запас пространства
+; для горизонтального торможения с (контроль ±90 4) и посадки с (контроль 0 4).
+; Код вычисления этих ограничений и дополнительного резервирования
 
 (let [dx-reserve 0.125
       dh-reserve 0.125]
@@ -110,7 +111,7 @@
   (defn- reserve-dh ^double [^double h] (+ h (* h dh-reserve))))
 
 ; Вычисляем разницу высот, на которой можем погасить vy, полагая, что управление
-; уже (vec 0 4). Вычисления в обычной системе координат: Марс внизу. Если
+; уже (контроль 0 4). Вычисления в обычной системе координат: Марс внизу. Если
 ; скорость такая, что гасить её не надо, нас это устраивает и мы отвечаем, что
 ; не нужна высота и время на сжигание топлива.
 
@@ -308,13 +309,6 @@
 ; равна 0. (2.2) считаем, что должны хотя бы 0 секунд тормозить. Иначе, нам дали
 ; плохой контроль, и можно было бы потратить меньше топлива на остановку.
 
-(comment (defn- speed-to-04 ^double [^Control control ^double vx]
-  (loop [v vx c control]
-    (if (= c (->Control 0 4))
-      v
-      (let [c-next (control-to c (->Control 0 4))]
-        (recur (+ v (x-acceleration c-next)) c-next))))))
-
 (defn- x-speed-adjust ^double [^Control c-from ^Control c-to ^double vx]
   (loop [v vx c c-from]
     (if (= c c-to)
@@ -377,12 +371,8 @@
           (conj m-next m)
           (recur (next moves-cloud)))))))
 
-; Решение для стадии (4) торможения. Тонкости. (4.1) ищем такой угол a для
-; (контроль a 4), который позволит погасить остаточную скорость, оставаясь в
-; границах pad.
-
 ; Решение для стадии (4) торможения. Пробуем гасить остаточную скорость с управлениями
-; (контроль (одно-из 7 -7) 4). Собственно, вот и вся логика. Функция quite-slow?
+; (контроль ±7 4). Собственно, вот и вся логика. Функция quite-slow?
 ; определяет, достаточно ли медленно горизонтальное движение. Достаточность
 ; определяется как то, что время полёта до границы посадочного стакана меньше,
 ; чем время полёта до дна. Время полёта до дна - галимая эвристика: примерно
@@ -421,6 +411,8 @@
           :done (list (conj R m))
           :ok (recur (:lander m) (conj R m)))))))
 
+; Рассчёт управления для стадии reverse
+
 (def ^:const ^:parivate reverse-initial-ok? hover-initial-ok?)
 
 (defn- check-section [^double dt
@@ -448,17 +440,6 @@
          (or (g/non-zero? (- x xo)) (pos? (* dir (- x-next xo))))
          (every? (check-section dt [x-next y-next] [ax vx x] [ay vy y]) S))))
 
-(comment (defn- reverse-align-control ^Move [^geometry.Stage {xt :x-target dir :direction :as stage}
-                                    ^Control C  
-                                    ^Lander L]
-  (loop [{c :control x :x :as l} L t 0.0]
-    (cond (= c C) (->Move :ok l t)
-          (pos? (* dir (- x xt))) (if (constraint stage l) (->Move :out l t) (->Move :ko l 0.0))
-          :else (let [c-next (control-to c C)]
-                  (if (reverse-alive? stage l c-next 1.0)
-                    (recur (just-move c-next 1.0 l) (+ 1.0 t))
-                    (->Move :ko l 0.0)))))))
-
 (defn- reverse-align-control ^Move [^geometry.Stage {xt :x-target dir :direction :as stage}
                                     ^Control C  
                                     ^Lander L]
@@ -470,21 +451,6 @@
                     (recur (just-move c-next 1.0 l) (+ 1.0 t))
                     (->Move :ko l 0.0))))))
 
-(comment (defn- reverse-steady-control ^Move [^geometry.Stage {xt :x-target :as stage}
-                                     ^Lander {x :x vx :vx C :control :as L}]
-  (let [ax (x-acceleration C)
-        t  (Math/ceil (g/time-to-intersect-1d ax vx x xt))]
-    (debugln :reverse-search "time to target:" t)
-    (if (and (Double/isFinite t)
-             (reverse-alive? stage L C t))
-      (let [l (just-move C t L)
-            dc (descend-constraint l)
-            bc (brake-constraint l (:direction stage))]
-        (debugln :reverse-search l)
-        (debugln :reverse-search dc)
-        (debugln :reverse-search bc)
-        (if (constraint stage l) (->Move :ok l t)))))))
-
 (defn- reverse-steady-control ^Move [^geometry.Stage {xt :x-target :as stage}
                                      ^Lander {x :x vx :vx C :control :as L}]
   (let [ax (x-acceleration C)
@@ -494,18 +460,22 @@
              (reverse-alive? stage L C t))
       (->Move :ok (just-move C t L) t))))
 
-; Наивный подход с одним контролем для разворота не работает. Следующий по
-; сложности подход - это торможение с фиксированным (контроль ±90 4), а потом
-; попытка добраться до x-target с некоторым другим контролем.
+; Логика примерно та же самая, что и в solve-brake-2. Отличие в том, что
+; скорость меняется не до нуля, а до противоположной и равной speed по модулю
 
-(comment (defn- reverse-integrate [^geometry.Stage stage ^Lander L ^Control C]
-           (let [{state :state :as m-align} (reverse-align-control stage L C)]
-             (debugln :reverse-search "m-align state:" state)
-             (case state
-               :ko nil
-               :ok (let [m-steady (reverse-steady-control stage (:lander m-align))]
-                     (if m-steady (list m-steady m-align)))
-               :out (list m-align)))))
+(defn- reverse-solve-brake ^Move [^geometry.Stage {dir :direction :as stage}
+                                  ^double speed
+                                  ^Control C
+                                  ^Lander {vx :vx c :control :as l}]
+  (let [ax (x-acceleration c)
+        v-drop (x-speed-adjust c C vx)]
+    (if (or (zero? ax)
+            (neg? (* vx v-drop)))
+      (->Move :ok l 0.0)
+      (let [t-brake (Math/ceil (g/time-to-speed ax v-drop (* dir speed)))]
+        (if (and (Double/isFinite t-brake)
+                 (reverse-alive? stage l c t-brake))
+          (->Move :ok (just-move c t-brake l) t-brake))))))
 
 ; Слишком много будет промежуточного case-анализа. Поэтому небольшая
 ; импровизация в monad-стиле
@@ -524,22 +494,6 @@
               (if c (continue-with l (conj moves m))))))))
 
 (defn- m-extract [^Lander l moves] moves)
-
-; Логика примерно та же самая, что и в solve-brake-2
-
-(defn- reverse-solve-brake ^Move [^geometry.Stage {dir :direction :as stage}
-                                  ^double speed
-                                  ^Control C
-                                  ^Lander {vx :vx c :control :as l}]
-  (let [ax (x-acceleration c)
-        v-drop (x-speed-adjust c C vx)]
-    (if (or (zero? ax)
-            (neg? (* vx v-drop)))
-      (->Move :ok l 0.0)
-      (let [t-brake (Math/ceil (g/time-to-speed ax v-drop (* dir speed)))]
-        (if (and (Double/isFinite t-brake)
-                 (reverse-alive? stage l c t-brake))
-          (->Move :ok (just-move c t-brake l) t-brake))))))
 
 (defn- reverse-integrate [^geometry.Stage {dir :direction :as stage}
                           ^Lander L
@@ -561,20 +515,6 @@
              (partial reverse-steady-control stage)
              m-extract))))
      L (list))))
-
-; Не имеет смысла разворачиваться с нулевым ускорением и направлять ускорение в
-; против направления разворота (в сторону скорости). В остальном та же логика,
-; что и для hover-control-cloud
-
-(comment (defn- reverse-control-cloud [^geometry.Stage {dir :direction :as stage} ^Lander l]
-           (let [δa (* dir (- angle-delta))
-                 a-from 0
-                 a-edge (* dir -90)]
-             (debugln :reverse-search a-from a-edge δa)
-             (for [p (range 4 5)
-                   a (let [a-to (:angle (:control (:lander (reverse-align-control stage (->Control a-edge p) l))))]
-                       (range a-from (- a-to dir) δa))]
-               (->Control a p)))))
 
 (let [make-cloud (fn [^long dir]
                    (let [δa (* dir (- angle-delta))
@@ -616,7 +556,7 @@
               (let [trace (take t (next (iterate (partial move c 1.0) l)))]
                 (conj (trace-moves (next moves) (last trace))
                       trace)))))]
-  (defn model-guide [moves ^Lander l]
+  (defn- model-guide [moves ^Lander l]
     (let [traces (trace-moves (mapcat reverse moves) l)]
       (debugln :model-guide "trace count:" (count traces) (reduce + (map count moves)))
       (when-first [t traces]

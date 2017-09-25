@@ -98,7 +98,6 @@
           r-shell (monotonize r-points)]
       [(vec (surface-sections l-shell)) (vec (surface-sections r-shell))])))
 
-
 (let [uplift-delta 64.0 ]
   (defn- uplift [^Section s] (->Section (:ax s) (+ uplift-delta (:ay s))
                                         (:bx s) (+ uplift-delta (:by s))
