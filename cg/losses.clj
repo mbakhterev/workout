@@ -51,7 +51,7 @@
     :else ST))
 
 (defn -main [& args]
-           (let [V (first args) '(3 2 10 7 15 14) ; (repeatedly (read) read)
+           (let [V '(3 2 10 7 15 14) ; (repeatedly (read) read)
                  f (first V)
                  S (reduce step (->State f f f f) V)]
              (println (- (:best-min S) (:best-max S)))))
