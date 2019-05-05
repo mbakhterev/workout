@@ -43,7 +43,21 @@
             n
             (+ n (remainder (- base n) cycle))))))
 
+(define (last-f n)
+  (if (<= base n)
+      (let ((r (remainder (- n base) cycle)))
+        (- n r))
+      (let ((r (remainder (- base n) cycle)))
+        (- n (- cycle r)))))
+
 (define (present f)
   (list (format "M: ~a" f)
         (format "B: ~a" (quotient (- f 2) 7))
         (format "C: ~a" (quotient (- f 1) 9))))
+
+(define (how-much n m)
+  (let ((l (min n m))
+        (r (max n m)))
+    (do ((f (last-f r) (- f cycle))
+         (answer '() (cons (present f) answer)))
+        ((< f l) answer))))
