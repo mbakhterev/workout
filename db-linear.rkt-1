@@ -1,0 +1,18 @@
+(require data/heap)
+
+(define (db-linear N)
+  (define (heap-extract-min! H)
+    (let ((m (heap-min H)))
+      (let loop ()
+        (heap-remove-min! H)
+        (when (= m (heap-min H))
+          (loop)))
+      m))
+
+  (let ((H (make-heap <=)))
+    (let loop ((n N) (x 1))
+      (if (zero? n)
+        x
+        (begin (heap-add-all! H (list (+ 1 (* 2 x))
+                                      (+ 1 (* 3 x))))
+               (loop (- n 1) (heap-extract-min! H)))))))
