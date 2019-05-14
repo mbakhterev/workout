@@ -1,24 +1,22 @@
-; Каждое разбиение - список пар из числа и его кратности в сумме. Пары
-; упорядочены от больших чисел к меньшим. bump - процедура, создающая варианты
-; суммы большей на 1. Варианты таковы: Добавить 1 к разбиению P; каждое число в
-; разбиении, кроме последнего (это учтено в следующем разбиении), увеличить на
-; 1. Это увеличение означает, уменьшить кратность этого числа на 1, и увеличить
-; кратность следующего числа на 1.
-
 (define num car)
-(define mult cdr)
+(define mul cdr)
+(define summand cons)
 
-(define (bump P)
-  (define (bump-rest P)
-    (let ((n (car P))
-          (ns (cdr P)))
-      (if (empty? ns))
-      ))
+(define (part-merge K N)
+  (cond ((empty? K) N)
+        ((empty? N) K)
+        (else (let ((n (car N))
+                    (k (cdr N)))
+                (cond ((< (num n) (num k)) (cons n (parts-merge K (cdr N))))
+                      ((< (num k) (num n)) (cons k (parts-merge (cdr K) N)))
+                      (else (cons (summand (num k) (+ (mul k) (mul n)))
+                                  (post-merge (cdr K) (cdr N)))))))))
 
-  (let ((p (car P))
-        (ps (cdr P)))
-    (if (equal? 1 (num p))
-        (cons (cons (cons 1 (+ 1 (mult p))) ps)
-              (bump-rest P))
-        (cons (cons '(1 . 1) P)
-              (bump-rest P)))))
+(define (part-merge-all K N) (for*/list ((k K) (n N)) (part-merge k n)))
+
+(define (part n)
+  (let ((P (make-vector (+ n 1) '())))
+    (for ((m (in-range 1 ))))
+    
+    )
+  )
