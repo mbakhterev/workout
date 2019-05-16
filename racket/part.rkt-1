@@ -2,42 +2,42 @@
 (define mul cdr)
 (define summand cons)
 
-; Добавляем одно слагаемое в сумму. Добавляется число, не превосходящее уже
-; существующее в сумме. Слагаемые в сумме упорядочены по возрастанию
 (define (bump-one v P)
-  (let ((n (car P)))
-    (if (= v (num n))
-        (cons (summand v (+ 1 (mul n))) (cdr P))
-        (cons (summand v 1) P))))
+  (if (empty? P)
+      (cons (summand v 1) '())
+      (let ((n (car P)))
+        (if (= v (num n))
+            (cons (summand v (+ 1 (mul n))) (cdr P))
+            (cons (summand v 1) P)))))
 
-; Добавка единицы в первое слагаемое: убрать одно слагаемое, добавить 1 число в
-; следующее слагаемое. Если следующих нет, то ничего не делаем, это учтено в
-; других вариантах
 (define (bump-rest P)
-  (let ((n (car P))
-        (ns (cdr P)))
-    (cond ((empty? ns) (list))
+  (if (empty? P)
+    '()
+    (let ((n (car P))
+          (ns (cdr P)))
+      (cons (if (= 1 (mul n))
+                (bump-one (+ 1 (num n)) ns)
+                (cons (summand (num n) (- (mul n) 1))
+                      (bump-one (+ 1 (num n)) ns)))
+            (map (lambda (p) (cons n p)) (bump-rest ns))))))
 
-          ((= 1 (mul n)) (cons (bump-one (+ 1 (num n)) ns)
-                               (map (lambda (p) (cons n p)) (bump-rest ns))))
-
-          (else (cons (cons (summand (num n) (- (mul n) 1))
-                            (bump-one (+ 1 (num n)) ns))
-                      (map (lambda (p) (cons n p)) (bump-rest ns)))))))
-
-; Все способы добавить 1 к разбиению P. 
 (define (bump P) (cons (bump-one 1 P) (bump-rest P)))
 
 (define (part N)
-  (let loop ((n 0) (P '()))
-    (if (= n N)
-        P
-        (loop (+ 1 n)
-              (append (append* (map bump P))
-                      (list (list (summand (+ 1 n) 1))))))))
+  (if (zero? N)
+      (set)
+      (let loop ((n 1) (P (set '((1 . 1)))))
+        (if (= n N)
+            P
+            (loop (+ 1 n)
+                  (foldl (lambda (p S) (set-union S (list->set p)))
+                         (set)
+                         (set-map P bump)))))))
 
-(define (part->vector P)
-  (let loop ((p P) (V #()))
-    (if (empty? p)
-      V
-      (loop (cdr p) (vector-append V (make-vector (mul (car p)) (num (car p))))))))
+(define (prod-one p)
+  (foldl (lambda (s v) (* v (expt (num s) (mul s))))
+         1
+         p))
+
+(define (prod P)
+  (list->set (set-map P prod-one)))
