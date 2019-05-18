@@ -1,55 +1,20 @@
--- data Term = Con Int | Div Term Term
---             deriving (Show)
--- 
--- parseTerm :: String -> Term
--- parseTerm = fst . head . parse term
--- 
--- term :: Parser Term
--- term = do
---     t <- factor
---     term' t
--- 
--- term' :: Term -> Parser Term
--- term' t = divFactor `bchoice` return t
---     where divFactor = do
---             lit '/'
---             u <- factor
---             term' $ Div t u
--- 
--- factor :: Parser Term
--- factor = numTerm `choice` parenTerm
---     where numTerm = do
---             n <- number
---             return $ Con n
---           parenTerm = do
---             lit '('
---             t <- term
---             lit ')'
---             return t
--- 
--- lit :: Char -> Parser Char
--- lit c = item `filt` \c' -> c == c'
--- 
--- reiterate :: Parser a -> Parser [a]
--- reiterate m = multiple `bchoice` return []
---     where multiple = do
---             t <- m
---             ts <- reiterate m
---             return $ t : ts
--- 
--- number :: Parser Int
--- number = do
---     ds <- reiterate digit
---     return (read ds :: Int)
--- 
--- main = print $ parseTerm "1972/2/23"
--- 
-
 import Data.Char
-import Data.Map
 import Data.List
+import qualified Data.Map as M
+import Debug.Trace
 
-newtype Parser a = Parser { parse :: String -> [(a, String)]
+newtype Parser a = Parser { parse :: String -> [(a, String)] }
+
+instance Functor Parser
+  where
+    fmap f p = Parser (\s -> map (\(v, r) -> (f v, r)) (parse p s))
+
+instance Applicative Parser
+  where
+    pure v = Parser (\s -> [(v, s)])
+    pf <*> p = Parser (\s -> do (f, r) <- parse pf s 
+                                (x, t) <- parse p r
+                                return (f x, t))
 
 instance Monad Parser
   where
@@ -60,10 +25,10 @@ zero :: Parser a
 zero = Parser (const [])
 
 item :: Parser Char
-item = Parser (\s -> case s of { [] -> []; (a : s) -> [(a, s)] }
+item = Parser (\s -> case s of { [] -> []; (a : s) -> [(a, s)] })
 
 match :: Parser a -> (a -> Bool) -> Parser a
-match m p = m >>= \c -> if p c then m else zero
+match m p = m >>= \t -> if p t then return t else zero
 
 digit :: Parser Char
 digit = match item isDigit
@@ -75,25 +40,36 @@ oneof :: Parser a -> Parser a -> Parser a
 oneof m n = Parser (\s -> parse m s ++ parse n s)
 
 choice :: Parser a -> Parser a -> Parser a
-choice m n = Parser (\s -> let p = (parse m s) in if p == []
+choice m n = Parser (\s -> let p = (parse m s) in if null p
                                                   then parse n s
                                                   else p)
-
-reiterate :: Parser a -> Parser [a]
+reiterate :: Show a => Parser a -> Parser [a]
 reiterate m = choice multiple (return [])
   where
     multiple = do t <- m
                   ts <- reiterate m
                   return (t : ts)
 
+number :: Parser Int
+number = reiterate digit >>= \ds -> return (read ds :: Int)
 
-data Term = Factor Int String (deriving Show)
+monom :: Parser String
+monom = reiterate variable
 
-polyParse :: String -> Term
-polyParse = fst . head . parse term
+sign :: Parser Char
+sign = choice (match item (== '+')) (match item (== '-'))
 
+factor :: Parser Int
+factor = choice signed number
+  where
+    signed = do s <- sign
+                n <- number
+                return (case s of { '-' -> (- n); '+' -> n })
 
-digit 
+data Term = Monom Int String deriving (Show)
+
+polyParse :: String -> Char
+polyParse = fst . head . parse sign
 
 -- split :: String -> [(String, Integer)]
 -- split = collect . tokenize "+|[0-9]*|[a-z]+"
