@@ -20,6 +20,3 @@
             (loop (+ i 1) (cons s S)))))))
 
 (define (double-boxes k n) (foldl + 0.0 (n-sums k n)))
-
-
-
