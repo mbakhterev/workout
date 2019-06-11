@@ -39,20 +39,31 @@ tokenize p = p <* space
 number :: Parser Integer
 number = tokenize (some (match item isDigit)) >>= \t -> return (read t :: Integer)
 
-variable :: Parser (Maybe Char)
-variable = tokenize ((match item isAlpha) >>= Just 
+variable :: Parser Char
+variable = tokenize (match item isAlpha)
 
 sign :: Parser Integer
 sign = do s <- tokenize (match item (\c -> (c == '+') || (c == '-')))
-          case s of '+' -> 1; '-' -> -1
+          return (case s of '+' -> 1; '-' -> -1)
 
-mono :: Parser Mono
-mono = do s <- sign <|> pure 1
-          n <- number <|> pure 1
-          do v <- variable <|> ; 
-            
+-- es - это знак, передаваемый из внешнего выражения
+mono :: Integer -> Parser Mono
+mono es =
+  do s <- sign <|> pure 1
+     n <- number <|> pure 1
+     (variable >>= \v -> return (Mono (es * s * n) (Just v)))
+      <|> (parenfy poly >>= \p -> return (Factor (es * s * n) p))
+      <|> (return (Mono (es * s * n) Nothing))
+
+parenfy :: Parser a -> Parser a
+parenfy p = (tokenize (match item (== '('))) *> p <* (tokenize (match item (== ')')))
 
 poly :: Parser [Mono]
+poly =
+  tokenize
+    (((:) <$> mono 1 <*> poly)
+      <|> (sign >>= \s -> (:) <$> mono s <*> poly)
+      <|> return [])
 
 -- E  -> T E'
 -- E' -> + T E' | -TE' |epsilon
