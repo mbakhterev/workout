@@ -65,26 +65,21 @@ mono es =
                      (return (Mono (es * s *n) Nothing)))
            (factored s) -- если множитель отсутствует, то factored-часть обязательна
 
--- mono :: Integer -> Parser Mono
--- mono es =
---   do s <- sign <|> pure 1
---      n <- number <|> pure 1
---      (variable >>= \v -> return (Mono (es * s * n) (Just v)))
---       <|> (parenfy poly >>= \p -> return (Factor (es * s * n) p))
---       <|> (return (Mono (es * s * n) Nothing))
-
 poly :: Parser [Mono]
-poly =
-  tokenize
-    (((:) <$> mono 1 <*> poly)
-      <|> (sign >>= \s -> (:) <$> mono s <*> poly)
-      <|> return [])
+poly = tokenize ((:) <$> mono 1 <*> polychain)
+       where polychain = (<|>) (sign >>= \s -> (:) <$> mono s <*> polychain)
+                               (return [])
 
--- E  -> T E'
--- E' -> + T E' | -TE' |epsilon
--- T  -> F T'
--- T' -> * F T' | /FT' |epsilon
--- F  -> (E) | int
+--    (((:) <$> mono 1 <*> poly)
+--      <|> (sign >>= \s -> (:) <$> mono s <*> poly)
+--      <|> return [])
+
+flatten :: [Mono] -> [Mono]
+flatten l = l >>= \m -> case m of
+                         Mono f v -> return (Mono f v)
+                         Factor f p -> flatten p >>= \n -> case n of
+                                                              Mono g w -> return (Mono (f * g) w)
+                                                              Factor x y -> error "shouldn't be the case"
 
 simplify :: [String] -> String -> String
 simplify es s = ""
