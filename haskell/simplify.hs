@@ -62,24 +62,19 @@ mono es =
   do s <- sign <|> pure 1 -- знак может быть или не быть. Это ни на что не влияет
      (<|>) (do n <- number -- если присутствует множитель, то factored-части может и не быть
                (<|>) (factored (es * s * n))
-                     (return (Mono (es * s *n) Nothing)))
-           (factored s) -- если множитель отсутствует, то factored-часть обязательна
+                     (return (Mono (es * s * n) Nothing)))
+           (factored (es * s)) -- если множитель отсутствует, то factored-часть обязательна
 
 poly :: Parser [Mono]
 poly = tokenize ((:) <$> mono 1 <*> polychain)
        where polychain = (<|>) (sign >>= \s -> (:) <$> mono s <*> polychain)
                                (return [])
 
---    (((:) <$> mono 1 <*> poly)
---      <|> (sign >>= \s -> (:) <$> mono s <*> poly)
---      <|> return [])
-
-flatten :: [Mono] -> [Mono]
+flatten :: [Mono] -> [(Integer, Maybe Char)]
 flatten l = l >>= \m -> case m of
-                         Mono f v -> return (Mono f v)
-                         Factor f p -> flatten p >>= \n -> case n of
-                                                              Mono g w -> return (Mono (f * g) w)
-                                                              Factor x y -> error "shouldn't be the case"
+                         Mono f v -> return (f, v)
+                         Factor f p -> flatten p >>= \(n, w) -> return (n * f, w)
+
 
 simplify :: [String] -> String -> String
 simplify es s = ""
