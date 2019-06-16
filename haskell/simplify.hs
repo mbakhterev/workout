@@ -46,17 +46,32 @@ sign :: Parser Integer
 sign = do s <- tokenize (match item (\c -> (c == '+') || (c == '-')))
           return (case s of '+' -> 1; '-' -> -1)
 
+parenfy :: Parser a -> Parser a
+parenfy p = (tokenize (match item (== '('))) *> p <* (tokenize (match item (== ')')))
+
+-- Часть слагаемого с обязательной переменной или подвыражением в скобках.
+-- Параметризовано множителем m
+
+factored :: Integer -> Parser Mono
+factored m = (<|>) (variable >>= \v -> return (Mono m (Just v)))
+                   (parenfy poly >>= \p -> return (Factor m p))
+
 -- es - это знак, передаваемый из внешнего выражения
 mono :: Integer -> Parser Mono
 mono es =
-  do s <- sign <|> pure 1
-     n <- number <|> pure 1
-     (variable >>= \v -> return (Mono (es * s * n) (Just v)))
-      <|> (parenfy poly >>= \p -> return (Factor (es * s * n) p))
-      <|> (return (Mono (es * s * n) Nothing))
+  do s <- sign <|> pure 1 -- знак может быть или не быть. Это ни на что не влияет
+     (<|>) (do n <- number -- если присутствует множитель, то factored-части может и не быть
+               (<|>) (factored (es * s * n))
+                     (return (Mono (es * s *n) Nothing)))
+           (factored s) -- если множитель отсутствует, то factored-часть обязательна
 
-parenfy :: Parser a -> Parser a
-parenfy p = (tokenize (match item (== '('))) *> p <* (tokenize (match item (== ')')))
+-- mono :: Integer -> Parser Mono
+-- mono es =
+--   do s <- sign <|> pure 1
+--      n <- number <|> pure 1
+--      (variable >>= \v -> return (Mono (es * s * n) (Just v)))
+--       <|> (parenfy poly >>= \p -> return (Factor (es * s * n) p))
+--       <|> (return (Mono (es * s * n) Nothing))
 
 poly :: Parser [Mono]
 poly =
