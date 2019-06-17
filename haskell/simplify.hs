@@ -70,11 +70,23 @@ poly = tokenize ((:) <$> mono 1 <*> polychain)
        where polychain = (<|>) (sign >>= \s -> (:) <$> mono s <*> polychain)
                                (return [])
 
+bind :: Parser (Char, [Mono])
+bind = (,) <$> (variable <* (tokenize (match item (== '=')))) <*> poly
+
 flatten :: [Mono] -> [(Integer, Maybe Char)]
 flatten l = l >>= \m -> case m of
                          Mono f v -> return (f, v)
                          Factor f p -> flatten p >>= \(n, w) -> return (n * f, w)
 
 
+collect :: [(Integer, Maybe Char)] -> [(Integer, Maybe Char)]
+collect = map reduce . groupBy samevar
+  where
+    samevar (m, v) (n, u) = v == u
+    reduce l = (,) (sum (map fst l)
+                   (snd (head l))
+
+
+  
 simplify :: [String] -> String -> String
 simplify es s = ""
