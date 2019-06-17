@@ -2,8 +2,12 @@ import Control.Applicative (Alternative (..))
 import Control.Monad.Trans.State.Strict
 import Data.Char
 import Data.List
+<<<<<<< HEAD
 import Data.Maybe
 import qualified Data.Map as M
+=======
+import qualified Data.Map.Strict as M
+>>>>>>> 28d7b2baf8255002c91983fdb9cfdb837cdf2660
 
 newtype Parser a = Parser { current :: StateT String Maybe a }
 parse = runStateT . current
@@ -74,7 +78,11 @@ poly = tokenize ((:) <$> mono 1 <*> polychain)
                                (return [])
 
 binding :: Parser (Char, [Mono])
+<<<<<<< HEAD
 binding = flip (,) <$> poly <*> (tokenize (match item (== '=')) *> variable)
+=======
+binding = flip (,) <$> poly <*> ((tokenize (match item (== '='))) *> variable)
+>>>>>>> 28d7b2baf8255002c91983fdb9cfdb837cdf2660
 
 flatten :: [Mono] -> [(Integer, Maybe Char)]
 flatten l = l >>= \m -> case m of
