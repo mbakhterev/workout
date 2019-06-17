@@ -1,6 +1,9 @@
 import Control.Applicative (Alternative (..))
 import Control.Monad.Trans.State.Strict
 import Data.Char
+import Data.List
+import Data.Maybe
+import qualified Data.Map as M
 
 newtype Parser a = Parser { current :: StateT String Maybe a }
 parse = runStateT . current
@@ -70,23 +73,39 @@ poly = tokenize ((:) <$> mono 1 <*> polychain)
        where polychain = (<|>) (sign >>= \s -> (:) <$> mono s <*> polychain)
                                (return [])
 
-bind :: Parser (Char, [Mono])
-bind = (,) <$> (variable <* (tokenize (match item (== '=')))) <*> poly
+binding :: Parser (Char, [Mono])
+binding = flip (,) <$> poly <*> (tokenize (match item (== '=')) *> variable)
 
 flatten :: [Mono] -> [(Integer, Maybe Char)]
 flatten l = l >>= \m -> case m of
                          Mono f v -> return (f, v)
                          Factor f p -> flatten p >>= \(n, w) -> return (n * f, w)
 
-
 collect :: [(Integer, Maybe Char)] -> [(Integer, Maybe Char)]
-collect = map reduce . groupBy samevar
+collect = map reduce . groupBy samevar . sortOn snd
   where
     samevar (m, v) (n, u) = v == u
-    reduce l = (,) (sum (map fst l)
-                   (snd (head l))
+    reduce l = (sum (map fst l), snd (head l))
 
-
+polymerize :: [Mono] -> [Mono]
+polymerize = map (\ (n, v) -> Mono n v) . collect . flatten
   
+environize :: [String] -> M.Map Char [Mono]
+environize = M.fromList . map (\((v, p), r) -> (v, polymerize p))
+                        . catMaybes
+                        . map (parse binding) 
+
+substitute :: M.Map Char [Mono] -> [(Integer, Maybe Char)] -> [Mono]
+substitute env = map substone
+  where
+    substone (f, Nothing) = Mono f Nothing
+    substone (f, Just v) = case M.lookup v env of Just m -> Factor f m; Nothing -> Mono f (Just v)
+
+isChanged :: [Mono] -> Bool
+isChanged = any isfactor
+  where
+    isfactor Mono f v = False
+    isfactor Factor f p = True
+
 simplify :: [String] -> String -> String
 simplify es s = ""
