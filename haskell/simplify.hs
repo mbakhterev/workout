@@ -1,6 +1,8 @@
 import Control.Applicative (Alternative (..))
 import Control.Monad.Trans.State.Strict
 import Data.Char
+import Data.List
+import qualified Data.Map.Strict as M
 
 newtype Parser a = Parser { current :: StateT String Maybe a }
 parse = runStateT . current
@@ -70,23 +72,27 @@ poly = tokenize ((:) <$> mono 1 <*> polychain)
        where polychain = (<|>) (sign >>= \s -> (:) <$> mono s <*> polychain)
                                (return [])
 
-bind :: Parser (Char, [Mono])
-bind = (,) <$> (variable <* (tokenize (match item (== '=')))) <*> poly
+binding :: Parser (Char, [Mono])
+binding = flip (,) <$> poly <*> ((tokenize (match item (== '='))) *> variable)
 
 flatten :: [Mono] -> [(Integer, Maybe Char)]
 flatten l = l >>= \m -> case m of
                          Mono f v -> return (f, v)
                          Factor f p -> flatten p >>= \(n, w) -> return (n * f, w)
 
-
 collect :: [(Integer, Maybe Char)] -> [(Integer, Maybe Char)]
-collect = map reduce . groupBy samevar
+collect = map sumvar . groupBy samevar . sortOn snd
   where
     samevar (m, v) (n, u) = v == u
-    reduce l = (,) (sum (map fst l)
-                   (snd (head l))
+    sumvar l = (sum (map fst l), snd (head l))
 
+polymerize :: [(Integer, Maybe Char)] -> [Mono]
+polymerize = map (\(n, v) -> Mono n v)
 
-  
+environize :: [(Char, [Mono])] -> M.Map Char [Mono]
+environize = M.fromList (map (\(n, v) -> Mono n v))
+
+substitute :: M.Map Char [Mono] -> [(Integer, Maybe Char)] -> [Mono]
+
 simplify :: [String] -> String -> String
 simplify es s = ""
