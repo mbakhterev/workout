@@ -2,12 +2,8 @@ import Control.Applicative (Alternative (..))
 import Control.Monad.Trans.State.Strict
 import Data.Char
 import Data.List
-<<<<<<< HEAD
 import Data.Maybe
-import qualified Data.Map as M
-=======
 import qualified Data.Map.Strict as M
->>>>>>> 28d7b2baf8255002c91983fdb9cfdb837cdf2660
 
 newtype Parser a = Parser { current :: StateT String Maybe a }
 parse = runStateT . current
@@ -73,16 +69,12 @@ mono es =
            (factored (es * s)) -- если множитель отсутствует, то factored-часть обязательна
 
 poly :: Parser [Mono]
-poly = tokenize ((:) <$> mono 1 <*> polychain)
+poly = space *> tokenize ((:) <$> mono 1 <*> polychain)
        where polychain = (<|>) (sign >>= \s -> (:) <$> mono s <*> polychain)
                                (return [])
 
 binding :: Parser (Char, [Mono])
-<<<<<<< HEAD
 binding = flip (,) <$> poly <*> (tokenize (match item (== '=')) *> variable)
-=======
-binding = flip (,) <$> poly <*> ((tokenize (match item (== '='))) *> variable)
->>>>>>> 28d7b2baf8255002c91983fdb9cfdb837cdf2660
 
 flatten :: [Mono] -> [(Integer, Maybe Char)]
 flatten l = l >>= \m -> case m of
@@ -112,8 +104,31 @@ substitute env = map substone
 isChanged :: [Mono] -> Bool
 isChanged = any isfactor
   where
-    isfactor Mono f v = False
-    isfactor Factor f p = True
+    isfactor (Mono f v) = False
+    isfactor (Factor f p) = True
+
+parsepoly :: String -> [Mono]
+parsepoly s = case parse poly s of
+                Just (m, r) -> m
+                Nothing -> error "do not know what to do"
+
+monoshow :: (Integer, Maybe Char) -> String
+monoshow (n, Nothing) | n < 0 = show n
+                      | n == 0 = ""
+                      | n > 0 = '+' : show n
+monoshow (n, Just v) | n < -1 = show n ++ [v]
+                     | n == -1 = '-' : [v]
+                     | n == 0 = ""
+                     | n == 1 = '+' : [v]
+                     | n > 1 = '+' : show n ++ [v]
+
+polyshow :: [(Integer, Maybe Char)] -> String
+polyshow = (\s -> if head s == '+' then tail s else s) . foldl (++) "" . map monoshow
 
 simplify :: [String] -> String -> String
-simplify es s = ""
+simplify es s = loop (environize es) ((collect . flatten . parsepoly) s)
+  where
+    loop env p = let next = substitute env p
+                 in if isChanged next
+                    then loop env ((collect . flatten) next)
+                    else polyshow p
