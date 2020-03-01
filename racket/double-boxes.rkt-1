@@ -1,0 +1,28 @@
+(define (range-of-ks k) (range 1 (+ 1 k)))
+
+(define (lcm-of-ks k-range) (apply lcm k-range))
+
+(define (n-make-generators n)
+  (do ((i n (- i 1))
+       (ns '() (cons (/ 1 (sqr (+ 1 i))) ns)))
+      ((zero? i) ns)))
+
+(define (factors-of-ks k k-lcm k-range)
+  (map (lambda (i) (quotient k-lcm i)) k-range))
+
+(define (n-sum n k k-factors k-lcm)
+  (let* ((N (sqr (+ n 1)))
+         (poly-sum (foldl (lambda (i s) (+ (* s N) i)) 0 k-factors)))
+    (/ (* poly-sum)
+       (* k-lcm (expt N k)))))
+
+(define (double-boxes k n)
+  (let* ((k-range (range-of-ks k))
+         (k-lcm (lcm-of-ks k-range))
+         (k-factors (factors-of-ks k k-lcm k-range)))
+    (do ((i 1 (+ 1 i))
+         (sum 0 (+ sum (n-sum i k k-factors k-lcm))))
+        ((> i n) (exact->inexact sum)))))
+
+
+
