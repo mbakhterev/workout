@@ -91,10 +91,21 @@
 (define (closure r n* e*)
   (λ (v*)
     (λ (k)
-      (((evaluate-begin e*) k) (extend-env n* v* r)))))
+      (((evaluate-begin e*) k) (extend-env n*
+					   v*
+					   r)))))
 
 (define (evaluate-lambda n* e*)
   (λ (k) (λ (r) (k (closure r n* e*)))))
 
 (define (evaluate-apply e e*)
-  (λ (k)))
+  (λ (k)
+    (λ (r)
+      (((evaluate e) (fn-cont e* k r)) r))))
+
+(define (fn-cont e* k r)
+  (λ (f)
+    (((evaluate-arguments e*) (app-cont f k r)) r)))
+
+(define (app-cont f k r)
+  )
