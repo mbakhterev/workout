@@ -43,5 +43,36 @@
 
 (define top-env '())
 
-(define (test) (top-eval '(begin (begin 'a 'b 1) (begin) 4 (if (begin) (begin 1) (begin 'a)))))
+(define (test) (top-eval '(begin
+			    (begin 'a 'b 1)
+			    (begin)
+			    4
+			    (if (begin)
+				(begin 1)
+				(begin 'a)))))
 
+(define (empty-env n k)
+  (error "в окружении нет переменной:" n))
+
+(define (extend-env n v r)
+  (λ (n-requested k) (if (eq? n-requested n)
+			   (k v)
+			   (r n-requested k))))
+
+(define (evaluate-variable n)
+  (λ (k) (λ (r) ((r n k) r))))
+
+(define (make-env b*)
+  (cond ((null? b*) empty-env)
+	((and (symbol? (car b*))
+	      (pair? (cdr b*)))
+	 (extend-env (car b*)
+		     (cadr b*)
+		     (make-env (cddr b*))))
+	(else (error "некоррректное окружение:"
+		     b*))))
+
+(define (with-env e b*)
+  (((evaluate e) top-cont) (make-env b*)))
+
+(with-env '(if a b c) '(a () b 2 c 3))
