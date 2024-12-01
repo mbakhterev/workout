@@ -54,7 +54,7 @@
 (define (empty-env n k)
   (error "в окружении нет переменной:" n))
 
-(define (extend-env n v r)
+(define (bind-env n v r)
   (λ (n-requested k) (if (eq? n-requested n)
 			   (k v)
 			   (r n-requested k))))
@@ -66,13 +66,35 @@
   (cond ((null? b*) empty-env)
 	((and (symbol? (car b*))
 	      (pair? (cdr b*)))
-	 (extend-env (car b*)
+	 (bind-env (car b*)
 		     (cadr b*)
 		     (make-env (cddr b*))))
 	(else (error "некоррректное окружение:"
 		     b*))))
 
+(define (extend-env n* v* r)
+  (cond ((and (null? n*) (null? v*)) r)
+	((and (symbol? n*)) (bind-env n* v* r))
+	((and (pair? n*)
+	      (pair? v*)
+	      (symbol? (car n*)))
+	 (bind-env (car n*)
+		   (car v*)
+		   (extend-env (cdr n*) (cdr v*) r)))
+	(else (error "несовпадение арностей:" n* v*))))
+
 (define (with-env e b*)
   (((evaluate e) top-cont) (make-env b*)))
 
 (with-env '(if a b c) '(a () b 2 c 3))
+
+(define (closure r n* e*)
+  (λ (v*)
+    (λ (k)
+      (((evaluate-begin e*) k) (extend-env n* v* r)))))
+
+(define (evaluate-lambda n* e*)
+  (λ (k) (λ (r) (k (closure r n* e*)))))
+
+(define (evaluate-apply e e*)
+  (λ (k)))
