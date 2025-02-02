@@ -1,5 +1,15 @@
-;; Попытка сделать семантику (((ev expr) k) r) не удалась. Потому что постоянно
-;; приходится «дотягиваться» до r через k, и снова формировать нужную структуру
-;; аппликаций. Видимо, каррировать в виде (((ev expr) r) k) тоже не особо
-;; осмысленно, потому что теперь просто в других случаях придётся «дотягиваться»
-;; до k (продолжение) через r (окружение).
+(import (ice-9 match))
+
+(define atom? (compose not pair?))
+
+(define evaluate
+  (match-lambda
+    ((? symbol? e) (evaluate-variable e))
+    ((or (? number? e)
+	 (? null? e)) (evaluate-quote e))
+    (('quote e) (evaluate-quote e))
+    (('if ec et ef) (evaluate-if ec et ef))
+    (('begin . e*) (evaluate-begin e*))
+    (('lambda v* . e*) (evaluate-lambda v* e*))
+    ((e . e*) (evaluate-applicaton e e*))
+    (e (error "неизвестный синтаксис" e))))
