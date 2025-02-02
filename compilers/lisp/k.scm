@@ -84,3 +84,10 @@
 	(else (error "несовпадение арностей" n* v*))))
 
 (top-eval '(if a b c) '(a () b 2 c 3))
+
+(define (evaluate-lambda n* e*)
+  (λ (r) (λ (k) (k (closure n* e* r)))))
+
+(define (closure n* e* r)
+  (λ (v*) ((evaluate-begin e*) (extend-env n* v* r))))
+
