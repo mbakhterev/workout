@@ -40,7 +40,11 @@
 (define (empty-env n)
   (λ (k) (error "в окружении нет переменной" n)))
 
-(define (top-eval e) (((evaluate e) empty-env) identity))
+;; (define (top-eval e) (((evaluate e) empty-env) identity))
+
+(define top-eval
+  (case-lambda ((e b*) (((evaluate e) (make-env b*)) identity))
+	       ((e) (top-eval e '()))))
 
 (top-eval '(begin
 	     (begin 'a 'b 1)
@@ -54,3 +58,29 @@
   (λ (n-requested) (if (eq? n-requested n)
 		       (λ (k) (k v))
 		       (r n-requested))))
+
+(define (evaluate-variable n)
+  (λ (r) (r n)))
+
+(define (make-env b*)
+  (cond ((null? b*) empty-env)
+	((and (symbol? (car b*))
+	      (pair? (cdr b*)))
+	 (bind-env (car b*)
+		     (cadr b*)
+		     (make-env (cddr b*))))
+	(else (error "некоррректное окружение"
+		     b*))))
+
+(define (extend-env n* v* r)
+  (cond ((and (null? n*) (null? v*)) r)
+	((and (symbol? n*)) (bind-env n* v* r))
+	((and (pair? n*)
+	      (pair? v*)
+	      (symbol? (car n*)))
+	 (bind-env (car n*)
+		   (car v*)
+		   (extend-env (cdr n*) (cdr v*) r)))
+	(else (error "несовпадение арностей" n* v*))))
+
+(top-eval '(if a b c) '(a () b 2 c 3))
