@@ -91,3 +91,8 @@
 (define (closure n* e* r)
   (λ (v*) ((evaluate-begin e*) (extend-env n* v* r))))
 
+(define (evaluate-application e e*)
+  (λ (r) (((evaluate e) r) (fn-cont e* r))))
+
+(define (fn-cont e* r)
+  (λ (f) (((evaluate-artuments e*) r) (app-cont f ))))
